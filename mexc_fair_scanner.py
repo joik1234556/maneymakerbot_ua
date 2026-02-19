@@ -1,4 +1,5 @@
 import asyncio
+import html as _html
 import json
 import math
 import os
@@ -12,7 +13,7 @@ import aiohttp
 # =========================
 # TELEGRAM SETTINGS
 # =========================
-BOT_TOKEN = "8492744850:AAH9hLd4SNXQL8zedZQatuKRlYyLztcSv_k"
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 ADMIN_IDS = {235202249}  # добавляй админов сюда
 
 # Куда слать сигналы в форумах (Topics):
@@ -274,13 +275,20 @@ def should_use_topics(meta: Dict[str, Any]) -> bool:
 # =========================
 # TELEGRAM API
 # =========================
+def _tg_edit_is_not_modified(result: Dict[str, Any]) -> bool:
+    """Returns True when Telegram rejected the edit only because content is unchanged."""
+    err = result.get("description", "").lower()
+    return result.get("error_code") == 400 and "message is not modified" in err
+
 async def tg_send(session: aiohttp.ClientSession, chat_id: int, text: str,
                   buttons: Optional[List[List[Dict[str, str]]]] = None,
-                  thread_id: Optional[int] = None):
+                  thread_id: Optional[int] = None,
+                  parse_mode: str = "HTML"):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload: Dict[str, Any] = {
         "chat_id": chat_id,
         "text": text,
+        "parse_mode": parse_mode,
         "disable_web_page_preview": False,
     }
     if thread_id is not None:
@@ -292,19 +300,26 @@ async def tg_send(session: aiohttp.ClientSession, chat_id: int, text: str,
 
 async def tg_edit(session: aiohttp.ClientSession, chat_id: int, message_id: int, text: str,
                   buttons: Optional[List[List[Dict[str, str]]]] = None,
-                  thread_id: Optional[int] = None):
+                  thread_id: Optional[int] = None,
+                  parse_mode: str = "HTML") -> Dict[str, Any]:
     # Важно: editMessageText НЕ принимает message_thread_id.
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText"
     payload: Dict[str, Any] = {
         "chat_id": chat_id,
         "message_id": message_id,
         "text": text,
+        "parse_mode": parse_mode,
         "disable_web_page_preview": False,
     }
     if buttons:
         payload["reply_markup"] = {"inline_keyboard": buttons}
     async with session.post(url, json=payload, timeout=20) as r:
-        return await r.json(content_type=None)
+        result = await r.json(content_type=None)
+    if not isinstance(result, dict):
+        return {}
+    if not result.get("ok") and not _tg_edit_is_not_modified(result):
+        print(f"tg_edit error [{chat_id}/{message_id}]: {result.get('description', result)}")
+    return result
 
 async def tg_get_updates(session: aiohttp.ClientSession, offset: Optional[int]) -> Dict[str, Any]:
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
@@ -748,41 +763,45 @@ def make_arb_message(symbol: str, rows_all: List[MarketRow],
     fund_spread = abs(to_float(best.sell.fund_rate) - to_float(best.buy.fund_rate))
     fund24_spread = abs(to_float(best.sell.fund24_est) - to_float(best.buy.fund24_est))
 
-    lines: List[str] = []
-    lines.append(f"FUTURES ({best.spread_best*100:.2f}%)  {symbol}")
-    lines.append("")
-    lines.append(f"FSpread (funding): {fund_spread*100:.3f}% | 24h≈ {fund24_spread*100:.3f}%")
-    lines.append("")
-    lines.append("Exchange  Price      Fund       Fund24      Time")
-    lines.append("--------------------------------------------------")
+    table: List[str] = []
+    table.append(f"{'Exchange':<8}  {'Price':<10} {'Fund':<10} {'Fund24':<10} Time")
+    table.append("-" * 52)
     for r in sorted(rows_all, key=lambda x: x.exchange):
-        lines.append(
-            f"{r.exchange:<8} "
+        table.append(
+            f"{r.exchange:<8}  "
             f"{fmt_price(mid_price(r)):<10} "
             f"{fmt_pct(r.fund_rate):<10} "
             f"{fmt_pct(r.fund24_est):<10} "
             f"{r.fund_interval_h}h"
         )
-    lines.append("")
-    for r in sorted(rows_all, key=lambda x: x.exchange):
-        lines.append(f"{r.exchange} Объём 24h: {fmt_usd(r.vol24_usd)}")
 
+    vol_lines: List[str] = []
+    for r in sorted(rows_all, key=lambda x: x.exchange):
+        vol_lines.append(f"{r.exchange:<8}  Объём 24h: {fmt_usd(r.vol24_usd)}")
+
+    lines: List[str] = []
+    lines.append(f"FUTURES ({best.spread_best*100:.2f}%)  {_html.escape(symbol)}")
+    lines.append("")
+    lines.append(f"FSpread (funding): {fund_spread*100:.3f}% | 24h≈ {fund24_spread*100:.3f}%")
+    lines.append("")
+    lines.append(f"<pre>{_html.escape('\n'.join(table))}</pre>")
+    lines.append(f"<pre>{_html.escape('\n'.join(vol_lines))}</pre>")
     lines.append("")
     lines.append("Пары (лучшая + вторая, если близко):")
-    lines.append("--------------------------------------------------")
+    lines.append("-" * 50)
     lines.append(
-        f"✅ {best.buy.exchange} → {best.sell.exchange}: {pair_spread_text(best)}  |  "
-        f"{BTN_LONG} {best.buy.exchange} / {BTN_SHORT} {best.sell.exchange}"
+        f"✅ {_html.escape(best.buy.exchange)} → {_html.escape(best.sell.exchange)}: {pair_spread_text(best)}  |  "
+        f"{BTN_LONG} {_html.escape(best.buy.exchange)} / {BTN_SHORT} {_html.escape(best.sell.exchange)}"
     )
     if second is not None and math.isfinite(second.spread_best):
         note = "" if second.spread_best >= min_spread else " (ниже порога)"
         lines.append(
-            f"ℹ️ {second.buy.exchange} → {second.sell.exchange}: {pair_spread_text(second)}{note}  |  "
-            f"{BTN_LONG} {second.buy.exchange} / {BTN_SHORT} {second.sell.exchange}"
+            f"ℹ️ {_html.escape(second.buy.exchange)} → {_html.escape(second.sell.exchange)}: {pair_spread_text(second)}{_html.escape(note)}  |  "
+            f"{BTN_LONG} {_html.escape(second.buy.exchange)} / {BTN_SHORT} {_html.escape(second.sell.exchange)}"
         )
 
     lines.append("")
-    lines.append(f"Рекомендация: {BTN_LONG} на {best.buy.exchange} / {BTN_SHORT} на {best.sell.exchange}")
+    lines.append(f"Рекомендация: {BTN_LONG} на {_html.escape(best.buy.exchange)} / {BTN_SHORT} на {_html.escape(best.sell.exchange)}")
     return "\n".join(lines)
 
 # =========================
@@ -978,15 +997,24 @@ async def arb_loop(session: aiohttp.ClientSession, store: Dict[str, Any], settin
 
                     # если уже есть сообщение — редактируем, иначе отправляем новое
                     if msg_key in last_msg_id:
-                        await tg_edit(session, chat_id, last_msg_id[msg_key], text, buttons=buttons)
+                        edit_resp = await tg_edit(session, chat_id, last_msg_id[msg_key], text, buttons=buttons)
+                        if not edit_resp.get("ok") and not _tg_edit_is_not_modified(edit_resp):
+                            # сообщение удалено или недоступно — удаляем устаревший ID и шлём новое
+                            del last_msg_id[msg_key]
+                            resp = await tg_send(session, chat_id, text, buttons=buttons, thread_id=thread_id)
+                            try:
+                                if isinstance(resp, dict) and resp.get("ok") and isinstance(resp.get("result"), dict):
+                                    last_msg_id[msg_key] = int(resp["result"]["message_id"])
+                            except Exception as exc:
+                                print(f"ARB: failed to store message_id for {msg_key}: {exc}")
                     else:
                         resp = await tg_send(session, chat_id, text, buttons=buttons, thread_id=thread_id)
                         try:
                             if isinstance(resp, dict) and resp.get("ok") and isinstance(resp.get("result"), dict):
                                 mid = int(resp["result"]["message_id"])
                                 last_msg_id[msg_key] = mid
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            print(f"ARB: failed to store message_id for {msg_key}: {exc}")
 
         except Exception as e:
             print(f"ARB error: {type(e).__name__}: {e}")
@@ -1272,7 +1300,7 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
 # =========================
 async def main():
     if not BOT_TOKEN or "PASTE_" in BOT_TOKEN:
-        raise RuntimeError("Вставь BOT_TOKEN в начало файла.")
+        raise RuntimeError("Установи BOT_TOKEN: задай переменную окружения BOT_TOKEN или вставь токен в начало файла.")
 
     store = load_data()
     print(f"✅ Loaded subscribers: {len(all_subs(store))}")
