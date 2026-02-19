@@ -1,0 +1,7 @@
+{
+  "arb_min_price_spread": 0.0101,
+  "arb_min_volume_24h_usd": 2000000.0,
+  "fair_short_from": 0.02,
+  "fair_long_from": 0.03,
+  "fair_min_volume_24h_usd": 2000000.0
+}

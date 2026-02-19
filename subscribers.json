@@ -1,0 +1,22 @@
+[
+  {
+    "chat_id": -1003788428963,
+    "thread_id": 7,
+    "kind": "arb"
+  },
+  {
+    "chat_id": -1003788428963,
+    "thread_id": 4,
+    "kind": "fair"
+  },
+  {
+    "chat_id": 234350575,
+    "thread_id": null,
+    "kind": "arb"
+  },
+  {
+    "chat_id": 234350575,
+    "thread_id": null,
+    "kind": "fair"
+  }
+]
