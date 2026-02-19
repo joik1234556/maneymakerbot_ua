@@ -1,0 +1,82 @@
+{
+  "subs": {
+    "235202249": {
+      "chat_type": "private",
+      "is_forum": false
+    },
+    "-1003788428963": {
+      "chat_type": "supergroup",
+      "is_forum": true
+    }
+  },
+  "chat_settings": {
+    "235202249": {
+      "arb_min_price_spread": 0.03,
+      "arb_min_volume_24h_usd": 2000000.0,
+      "arb_enabled_exchanges": [
+        "BingX",
+        "Bybit",
+        "MEXC"
+      ],
+      "fair_short_from": 0.02,
+      "fair_long_from": 0.03,
+      "fair_min_volume_24h_usd": 5000000.0,
+      "topic_fair": 7,
+      "topic_arb": 4
+    },
+    "-1003788428963": {
+      "arb_min_price_spread": 0.03,
+      "arb_min_volume_24h_usd": 2000000.0,
+      "arb_enabled_exchanges": [
+        "Binance",
+        "BingX",
+        "Bybit",
+        "Gate",
+        "KuCoin",
+        "MEXC",
+        "OKX"
+      ],
+      "fair_short_from": 0.02,
+      "fair_long_from": 0.025,
+      "fair_min_volume_24h_usd": 150000.0,
+      "topic_fair": 7,
+      "topic_arb": 4
+    },
+    "234350575": {
+      "arb_min_price_spread": 0.03,
+      "arb_min_volume_24h_usd": 5000000.0,
+      "arb_enabled_exchanges": [
+        "MEXC",
+        "Bybit",
+        "BingX",
+        "Binance",
+        "OKX",
+        "KuCoin",
+        "Gate"
+      ],
+      "fair_short_from": 0.02,
+      "fair_long_from": 0.03,
+      "fair_min_volume_24h_usd": 5000000.0,
+      "topic_fair": 7,
+      "topic_arb": 4
+    },
+    "8580132208": {
+      "arb_min_price_spread": 0.03,
+      "arb_min_volume_24h_usd": 5000000.0,
+      "arb_enabled_exchanges": [
+        "MEXC",
+        "Bybit",
+        "BingX",
+        "Binance",
+        "OKX",
+        "KuCoin",
+        "Gate"
+      ],
+      "fair_short_from": 0.02,
+      "fair_long_from": 0.03,
+      "fair_min_volume_24h_usd": 5000000.0,
+      "topic_fair": 7,
+      "topic_arb": 4
+    }
+  }
+}
