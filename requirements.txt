@@ -1,0 +1,4 @@
+# Requirements for the Telegram bot
+python-telegram-bot
+requests
+dotenv
