@@ -329,6 +329,28 @@ async def tg_get_updates(session: aiohttp.ClientSession, offset: Optional[int]) 
     async with session.get(url, params=params, timeout=POLL_UPDATES_TIMEOUT + 10) as r:
         return await r.json(content_type=None)
 
+async def tg_get_chat_member(session: aiohttp.ClientSession, chat_id: int, user_id: int) -> Dict[str, Any]:
+    """Returns the getChatMember object for a user in a chat, or {} on error."""
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/getChatMember"
+    try:
+        async with session.get(url, params={"chat_id": chat_id, "user_id": user_id}, timeout=10) as r:
+            data = await r.json(content_type=None)
+        if isinstance(data, dict) and data.get("ok") and isinstance(data.get("result"), dict):
+            return data["result"]
+    except Exception as exc:
+        print(f"tg_get_chat_member error [{chat_id}/{user_id}]: {exc}")
+    return {}
+
+async def is_group_admin(session: aiohttp.ClientSession, chat_id: int, user_id: Optional[int],
+                         chat_type: str) -> bool:
+    """Returns True if the user is an administrator or creator of a group/supergroup."""
+    if not user_id:
+        return False
+    if chat_type not in ("group", "supergroup"):
+        return False
+    member = await tg_get_chat_member(session, chat_id, user_id)
+    return member.get("status") in ("administrator", "creator")
+
 # =========================
 # DATA STRUCTURES
 # =========================
@@ -1058,12 +1080,13 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
 
                 user = msg.get("from", {})
                 user_id = user.get("id")
-                is_admin = user_id in ADMIN_IDS
+                chat_type = str(chat.get("type") or "")
+                # Bot-owner IDs always have admin rights; group/supergroup Telegram admins also qualify
+                is_admin = (user_id in ADMIN_IDS) or await is_group_admin(session, chat_id, user_id, chat_type)
 
                 cs = get_chat_settings(store, chat_id)
 
                 if text.startswith("/start"):
-                    chat_type = str(chat.get("type") or "")
                     is_forum = bool(chat.get("is_forum"))
                     subscribe(store, chat_id, chat_type=chat_type, is_forum=is_forum)
 
