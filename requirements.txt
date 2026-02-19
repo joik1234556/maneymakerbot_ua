@@ -1,4 +1,4 @@
-# Requirements for the Telegram bot
-python-telegram-bot
-requests
-dotenv
+aiohttp>=3.8
+python-dotenv>=0.21
+typing-extensions>=4.0
+alembic==1.11.0
