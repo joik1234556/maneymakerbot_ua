@@ -59,7 +59,323 @@ DEFAULT_CHAT_SETTINGS = {
     # Topics (если чат форумный)
     "topic_fair": DEFAULT_TOPIC_FAIR,
     "topic_arb": DEFAULT_TOPIC_ARB,
+
+    # Notification language: "ru" | "uk" | "en"
+    "lang": "ru",
 }
+
+# =========================
+# LOCALIZATION
+# =========================
+SUPPORTED_LANGS = ("ru", "uk", "en")
+DEFAULT_LANG = "ru"
+
+LANG_CHOICE_TEXT = "🌐 Виберіть мову / Выберите язык / Choose language:"
+LANG_CHOICE_BUTTONS: List[List[Dict[str, str]]] = [[
+    {"text": "🇷🇺 Русский",    "callback_data": "set_lang:ru"},
+    {"text": "🇺🇦 Українська", "callback_data": "set_lang:uk"},
+    {"text": "🇬🇧 English",    "callback_data": "set_lang:en"},
+]]
+
+STRINGS: Dict[str, Dict[str, str]] = {
+    # ─────────────── RUSSIAN ───────────────
+    "ru": {
+        "lang_set":         "✅ Язык установлен: Русский 🇷🇺",
+        "subscribed":       (
+            "✅ Подписка включена.\n"
+            "Буду присылать:\n"
+            "1) MEXC FAIR (topic {topic_fair}, если это форум)\n"
+            "2) FUTURES ARB (topic {topic_arb}, если это форум)\n\n"
+            "Помощь: /help\n"
+            "Показать ID топика: /topic (напиши внутри топика)\n"
+            "Сменить язык: /lang\n"
+            "Отключить: /stop"
+        ),
+        "unsubscribed":     "🛑 Подписка отключена.\nВключить снова: /start",
+        "topic_id":         "ID этого топика: {thread_id}",
+        "no_topic":         "Это не топик (или в чате не включены темы).",
+        "no_access":        "Нет доступа.",
+        "help": (
+            "Команды:\n"
+            "/start — подписаться\n"
+            "/stop — отписаться\n"
+            "/lang — сменить язык уведомлений\n"
+            "/topic — показать ID топика (внутри топика)\n\n"
+            "Админ/настройки (для этого чата):\n"
+            "/topics fair=4 arb=7 — куда слать сигналы (топики, только в forum)\n"
+            "/arb_config — настройки арбитража\n"
+            "/arb_spread X — порог спреда (%), пример: /arb_spread 3\n"
+            "/arb_volume X — объём 24h, пример: /arb_volume 5m\n"
+            "/exchanges — список бирж\n"
+            "/ex_on NAME — включить биржу\n"
+            "/ex_off NAME — выключить биржу\n"
+            "/fair_config — настройки MEXC FAIR\n"
+            "/fair_short X — порог SHORT (%), пример: /fair_short 2\n"
+            "/fair_long X — порог LONG (%), пример: /fair_long 3\n"
+            "/fair_volume X — мин. объём 24h, пример: /fair_volume 5m"
+        ),
+        "topics_updated":   "✅ Topics обновлены: fair={topic_fair} arb={topic_arb}",
+        "topics_format":    "Формат: /topics fair=4 arb=7",
+        "exchanges_list":   "Биржи для ARB:\nMEXC, Bybit, BingX, Binance, OKX, KuCoin, Gate\n\n✅ Включены сейчас: {enabled}",
+        "ex_enabled":       "✅ Включено: {name}",
+        "ex_on_hint":       "Пример: /ex_on BingX",
+        "ex_disabled":      "🛑 Выключено: {name}",
+        "ex_off_hint":      "Пример: /ex_off BingX",
+        "arb_config": (
+            "⚙️ Настройки ARB (для этого чата):\n"
+            "- Порог спреда: {spread}\n"
+            "- Мин. объём 24h: {vol}\n"
+            "- Биржи: {exchanges}\n"
+            "- Refresh: {refresh}s\n"
+            "- Cooldown: {cooldown}s\n"
+            "- Вторая пара если хуже ≤ {gap}%"
+        ),
+        "arb_spread_fmt":   "Формат: /arb_spread 3  (это 3%)",
+        "arb_spread_bad":   "Слишком странное значение. Пример: 3 или 3%",
+        "arb_spread_ok":    "✅ ARB порог спреда: {val}",
+        "arb_spread_err":   "Не понял число. Пример: /arb_spread 3",
+        "arb_vol_fmt":      "Формат: /arb_volume 5m  или  /arb_volume 5000000",
+        "arb_vol_small":    "Слишком маленький объём. Пример: /arb_volume 5m",
+        "arb_vol_ok":       "✅ ARB мин. объём 24h: {val}",
+        "arb_vol_err":      "Не понял число. Пример: /arb_volume 5m",
+        "fair_config": (
+            "⚙️ Настройки MEXC FAIR (для этого чата):\n"
+            "- SHORT от: {short}\n"
+            "- LONG  от: {long}\n"
+            "- Мин. объём 24h: {vol}\n"
+            "- Refresh: {refresh}s\n"
+            "- Cooldown: {cooldown}s"
+        ),
+        "fair_short_fmt":   "Формат: /fair_short 2  (это 2%)",
+        "fair_short_bad":   "Слишком странное значение. Пример: 2 или 2%",
+        "fair_short_ok":    "✅ MEXC FAIR SHORT: {val}",
+        "fair_short_err":   "Не понял число. Пример: /fair_short 2",
+        "fair_long_fmt":    "Формат: /fair_long 3  (это 3%)",
+        "fair_long_bad":    "Слишком странное значение. Пример: 3 или 3%",
+        "fair_long_ok":     "✅ MEXC FAIR LONG: {val}",
+        "fair_long_err":    "Не понял число. Пример: /fair_long 3",
+        "fair_vol_fmt":     "Формат: /fair_volume 5m  или  /fair_volume 5000000",
+        "fair_vol_small":   "Слишком маленький объём. Пример: /fair_volume 5m",
+        "fair_vol_ok":      "✅ MEXC FAIR мин. объём 24h: {val}",
+        "fair_vol_err":     "Не понял число. Пример: /fair_volume 5m",
+        "fair_alert": (
+            "🔔 MEXC FAIR\n"
+            "Монета: {sym}\n"
+            "Направление: {side}\n"
+            "Спред: {spread}\n"
+            "Объём торгов 24h: {vol}\n"
+            "Последняя цена: {lastp}\n"
+            "Fair Price: {fair}\n"
+            "Плечо: {lev}"
+        ),
+        "arb_vol_label":        "Объём 24h",
+        "arb_pairs_header":     "Пары (лучшая + вторая, если близко):",
+        "arb_below_thresh":     " (ниже порога)",
+        "arb_recommendation":   "Рекомендация: {btn_long} на {buy} / {btn_short} на {sell}",
+    },
+
+    # ─────────────── UKRAINIAN ───────────────
+    "uk": {
+        "lang_set":         "✅ Мову встановлено: Українська 🇺🇦",
+        "subscribed": (
+            "✅ Підписку увімкнено.\n"
+            "Буду надсилати:\n"
+            "1) MEXC FAIR (topic {topic_fair}, якщо це форум)\n"
+            "2) FUTURES ARB (topic {topic_arb}, якщо це форум)\n\n"
+            "Допомога: /help\n"
+            "Показати ID топіку: /topic (напиши всередині топіку)\n"
+            "Змінити мову: /lang\n"
+            "Вимкнути: /stop"
+        ),
+        "unsubscribed":     "🛑 Підписку вимкнено.\nУвімкнути знову: /start",
+        "topic_id":         "ID цього топіку: {thread_id}",
+        "no_topic":         "Це не топік (або в чаті не увімкнено теми).",
+        "no_access":        "Немає доступу.",
+        "help": (
+            "Команди:\n"
+            "/start — підписатися\n"
+            "/stop — відписатися\n"
+            "/lang — змінити мову сповіщень\n"
+            "/topic — показати ID топіку (всередині топіку)\n\n"
+            "Адмін/налаштування (для цього чату):\n"
+            "/topics fair=4 arb=7 — куди надсилати сигнали (топіки, тільки у forum)\n"
+            "/arb_config — налаштування арбітражу\n"
+            "/arb_spread X — поріг спреду (%), приклад: /arb_spread 3\n"
+            "/arb_volume X — обсяг 24h, приклад: /arb_volume 5m\n"
+            "/exchanges — список бірж\n"
+            "/ex_on NAME — увімкнути біржу\n"
+            "/ex_off NAME — вимкнути біржу\n"
+            "/fair_config — налаштування MEXC FAIR\n"
+            "/fair_short X — поріг SHORT (%), приклад: /fair_short 2\n"
+            "/fair_long X — поріг LONG (%), приклад: /fair_long 3\n"
+            "/fair_volume X — мін. обсяг 24h, приклад: /fair_volume 5m"
+        ),
+        "topics_updated":   "✅ Topics оновлено: fair={topic_fair} arb={topic_arb}",
+        "topics_format":    "Формат: /topics fair=4 arb=7",
+        "exchanges_list":   "Біржі для ARB:\nMEXC, Bybit, BingX, Binance, OKX, KuCoin, Gate\n\n✅ Увімкнені зараз: {enabled}",
+        "ex_enabled":       "✅ Увімкнено: {name}",
+        "ex_on_hint":       "Приклад: /ex_on BingX",
+        "ex_disabled":      "🛑 Вимкнено: {name}",
+        "ex_off_hint":      "Приклад: /ex_off BingX",
+        "arb_config": (
+            "⚙️ Налаштування ARB (для цього чату):\n"
+            "- Поріг спреду: {spread}\n"
+            "- Мін. обсяг 24h: {vol}\n"
+            "- Біржі: {exchanges}\n"
+            "- Refresh: {refresh}s\n"
+            "- Cooldown: {cooldown}s\n"
+            "- Друга пара якщо гірше ≤ {gap}%"
+        ),
+        "arb_spread_fmt":   "Формат: /arb_spread 3  (це 3%)",
+        "arb_spread_bad":   "Занадто дивне значення. Приклад: 3 або 3%",
+        "arb_spread_ok":    "✅ ARB поріг спреду: {val}",
+        "arb_spread_err":   "Не зрозумів число. Приклад: /arb_spread 3",
+        "arb_vol_fmt":      "Формат: /arb_volume 5m  або  /arb_volume 5000000",
+        "arb_vol_small":    "Занадто малий обсяг. Приклад: /arb_volume 5m",
+        "arb_vol_ok":       "✅ ARB мін. обсяг 24h: {val}",
+        "arb_vol_err":      "Не зрозумів число. Приклад: /arb_volume 5m",
+        "fair_config": (
+            "⚙️ Налаштування MEXC FAIR (для цього чату):\n"
+            "- SHORT від: {short}\n"
+            "- LONG  від: {long}\n"
+            "- Мін. обсяг 24h: {vol}\n"
+            "- Refresh: {refresh}s\n"
+            "- Cooldown: {cooldown}s"
+        ),
+        "fair_short_fmt":   "Формат: /fair_short 2  (це 2%)",
+        "fair_short_bad":   "Занадто дивне значення. Приклад: 2 або 2%",
+        "fair_short_ok":    "✅ MEXC FAIR SHORT: {val}",
+        "fair_short_err":   "Не зрозумів число. Приклад: /fair_short 2",
+        "fair_long_fmt":    "Формат: /fair_long 3  (це 3%)",
+        "fair_long_bad":    "Занадто дивне значення. Приклад: 3 або 3%",
+        "fair_long_ok":     "✅ MEXC FAIR LONG: {val}",
+        "fair_long_err":    "Не зрозумів число. Приклад: /fair_long 3",
+        "fair_vol_fmt":     "Формат: /fair_volume 5m  або  /fair_volume 5000000",
+        "fair_vol_small":   "Занадто малий обсяг. Приклад: /fair_volume 5m",
+        "fair_vol_ok":      "✅ MEXC FAIR мін. обсяг 24h: {val}",
+        "fair_vol_err":     "Не зрозумів число. Приклад: /fair_volume 5m",
+        "fair_alert": (
+            "🔔 MEXC FAIR\n"
+            "Монета: {sym}\n"
+            "Напрямок: {side}\n"
+            "Спред: {spread}\n"
+            "Обсяг торгів 24h: {vol}\n"
+            "Остання ціна: {lastp}\n"
+            "Fair Price: {fair}\n"
+            "Плече: {lev}"
+        ),
+        "arb_vol_label":        "Обсяг 24h",
+        "arb_pairs_header":     "Пари (найкраща + друга, якщо близько):",
+        "arb_below_thresh":     " (нижче порогу)",
+        "arb_recommendation":   "Рекомендація: {btn_long} на {buy} / {btn_short} на {sell}",
+    },
+
+    # ─────────────── ENGLISH ───────────────
+    "en": {
+        "lang_set":         "✅ Language set: English 🇬🇧",
+        "subscribed": (
+            "✅ Subscription enabled.\n"
+            "I will send:\n"
+            "1) MEXC FAIR (topic {topic_fair}, if this is a forum)\n"
+            "2) FUTURES ARB (topic {topic_arb}, if this is a forum)\n\n"
+            "Help: /help\n"
+            "Show topic ID: /topic (send inside the topic)\n"
+            "Change language: /lang\n"
+            "Disable: /stop"
+        ),
+        "unsubscribed":     "🛑 Subscription disabled.\nEnable again: /start",
+        "topic_id":         "This topic ID: {thread_id}",
+        "no_topic":         "This is not a topic (or topics are not enabled in this chat).",
+        "no_access":        "Access denied.",
+        "help": (
+            "Commands:\n"
+            "/start — subscribe\n"
+            "/stop — unsubscribe\n"
+            "/lang — change notification language\n"
+            "/topic — show topic ID (inside the topic)\n\n"
+            "Admin/settings (for this chat):\n"
+            "/topics fair=4 arb=7 — where to send signals (topics, forum only)\n"
+            "/arb_config — arbitrage settings\n"
+            "/arb_spread X — spread threshold (%), example: /arb_spread 3\n"
+            "/arb_volume X — 24h volume, example: /arb_volume 5m\n"
+            "/exchanges — list of exchanges\n"
+            "/ex_on NAME — enable exchange\n"
+            "/ex_off NAME — disable exchange\n"
+            "/fair_config — MEXC FAIR settings\n"
+            "/fair_short X — SHORT threshold (%), example: /fair_short 2\n"
+            "/fair_long X — LONG threshold (%), example: /fair_long 3\n"
+            "/fair_volume X — min 24h volume, example: /fair_volume 5m"
+        ),
+        "topics_updated":   "✅ Topics updated: fair={topic_fair} arb={topic_arb}",
+        "topics_format":    "Format: /topics fair=4 arb=7",
+        "exchanges_list":   "Exchanges for ARB:\nMEXC, Bybit, BingX, Binance, OKX, KuCoin, Gate\n\n✅ Currently enabled: {enabled}",
+        "ex_enabled":       "✅ Enabled: {name}",
+        "ex_on_hint":       "Example: /ex_on BingX",
+        "ex_disabled":      "🛑 Disabled: {name}",
+        "ex_off_hint":      "Example: /ex_off BingX",
+        "arb_config": (
+            "⚙️ ARB settings (for this chat):\n"
+            "- Spread threshold: {spread}\n"
+            "- Min 24h volume: {vol}\n"
+            "- Exchanges: {exchanges}\n"
+            "- Refresh: {refresh}s\n"
+            "- Cooldown: {cooldown}s\n"
+            "- Second pair if worse by ≤ {gap}%"
+        ),
+        "arb_spread_fmt":   "Format: /arb_spread 3  (means 3%)",
+        "arb_spread_bad":   "Value out of range. Example: 3 or 3%",
+        "arb_spread_ok":    "✅ ARB spread threshold: {val}",
+        "arb_spread_err":   "Could not parse number. Example: /arb_spread 3",
+        "arb_vol_fmt":      "Format: /arb_volume 5m  or  /arb_volume 5000000",
+        "arb_vol_small":    "Volume too small. Example: /arb_volume 5m",
+        "arb_vol_ok":       "✅ ARB min 24h volume: {val}",
+        "arb_vol_err":      "Could not parse number. Example: /arb_volume 5m",
+        "fair_config": (
+            "⚙️ MEXC FAIR settings (for this chat):\n"
+            "- SHORT from: {short}\n"
+            "- LONG  from: {long}\n"
+            "- Min 24h volume: {vol}\n"
+            "- Refresh: {refresh}s\n"
+            "- Cooldown: {cooldown}s"
+        ),
+        "fair_short_fmt":   "Format: /fair_short 2  (means 2%)",
+        "fair_short_bad":   "Value out of range. Example: 2 or 2%",
+        "fair_short_ok":    "✅ MEXC FAIR SHORT: {val}",
+        "fair_short_err":   "Could not parse number. Example: /fair_short 2",
+        "fair_long_fmt":    "Format: /fair_long 3  (means 3%)",
+        "fair_long_bad":    "Value out of range. Example: 3 or 3%",
+        "fair_long_ok":     "✅ MEXC FAIR LONG: {val}",
+        "fair_long_err":    "Could not parse number. Example: /fair_long 3",
+        "fair_vol_fmt":     "Format: /fair_volume 5m  or  /fair_volume 5000000",
+        "fair_vol_small":   "Volume too small. Example: /fair_volume 5m",
+        "fair_vol_ok":      "✅ MEXC FAIR min 24h volume: {val}",
+        "fair_vol_err":     "Could not parse number. Example: /fair_volume 5m",
+        "fair_alert": (
+            "🔔 MEXC FAIR\n"
+            "Coin: {sym}\n"
+            "Direction: {side}\n"
+            "Spread: {spread}\n"
+            "24h Volume: {vol}\n"
+            "Last price: {lastp}\n"
+            "Fair Price: {fair}\n"
+            "Leverage: {lev}"
+        ),
+        "arb_vol_label":        "24h Volume",
+        "arb_pairs_header":     "Pairs (best + second, if close):",
+        "arb_below_thresh":     " (below threshold)",
+        "arb_recommendation":   "Recommendation: {btn_long} on {buy} / {btn_short} on {sell}",
+    },
+}
+
+def T(lang: str, key: str, **kwargs) -> str:
+    """Return a localized string, falling back to DEFAULT_LANG if the key is missing."""
+    s = STRINGS.get(lang, STRINGS[DEFAULT_LANG]).get(key) or STRINGS[DEFAULT_LANG].get(key, key)
+    if kwargs:
+        try:
+            return s.format(**kwargs)
+        except (KeyError, IndexError):
+            return s
+    return s
 
 # =========================
 # EXCHANGE API ENDPOINTS
@@ -350,6 +666,17 @@ async def is_group_admin(session: aiohttp.ClientSession, chat_id: int, user_id: 
         return False
     member = await tg_get_chat_member(session, chat_id, user_id)
     return member.get("status") in ("administrator", "creator")
+
+async def tg_answer_callback(session: aiohttp.ClientSession, callback_query_id: str,
+                              text: str = "") -> None:
+    """Answer an inline keyboard callback query to dismiss the loading spinner."""
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/answerCallbackQuery"
+    try:
+        async with session.post(url, json={"callback_query_id": callback_query_id, "text": text},
+                                timeout=10) as r:
+            await r.read()
+    except Exception:
+        pass
 
 # =========================
 # DATA STRUCTURES
@@ -781,7 +1108,7 @@ def make_buttons(best: PairView, second: Optional[PairView]) -> List[List[Dict[s
 
 def make_arb_message(symbol: str, rows_all: List[MarketRow],
                      best: PairView, second: Optional[PairView],
-                     min_spread: float) -> str:
+                     min_spread: float, lang: str = DEFAULT_LANG) -> str:
     fund_spread = abs(to_float(best.sell.fund_rate) - to_float(best.buy.fund_rate))
     fund24_spread = abs(to_float(best.sell.fund24_est) - to_float(best.buy.fund24_est))
 
@@ -799,7 +1126,7 @@ def make_arb_message(symbol: str, rows_all: List[MarketRow],
 
     vol_lines: List[str] = []
     for r in sorted(rows_all, key=lambda x: x.exchange):
-        vol_lines.append(f"{r.exchange:<8}  Объём 24h: {fmt_usd(r.vol24_usd)}")
+        vol_lines.append(f"{r.exchange:<8}  {T(lang, 'arb_vol_label')}: {fmt_usd(r.vol24_usd)}")
 
     lines: List[str] = []
     lines.append(f"FUTURES ({best.spread_best*100:.2f}%)  {_html.escape(symbol)}")
@@ -809,21 +1136,23 @@ def make_arb_message(symbol: str, rows_all: List[MarketRow],
     lines.append(f"<pre>{_html.escape('\n'.join(table))}</pre>")
     lines.append(f"<pre>{_html.escape('\n'.join(vol_lines))}</pre>")
     lines.append("")
-    lines.append("Пары (лучшая + вторая, если близко):")
+    lines.append(T(lang, "arb_pairs_header"))
     lines.append("-" * 50)
     lines.append(
         f"✅ {_html.escape(best.buy.exchange)} → {_html.escape(best.sell.exchange)}: {pair_spread_text(best)}  |  "
         f"{BTN_LONG} {_html.escape(best.buy.exchange)} / {BTN_SHORT} {_html.escape(best.sell.exchange)}"
     )
     if second is not None and math.isfinite(second.spread_best):
-        note = "" if second.spread_best >= min_spread else " (ниже порога)"
+        note = "" if second.spread_best >= min_spread else T(lang, "arb_below_thresh")
         lines.append(
             f"ℹ️ {_html.escape(second.buy.exchange)} → {_html.escape(second.sell.exchange)}: {pair_spread_text(second)}{_html.escape(note)}  |  "
             f"{BTN_LONG} {_html.escape(second.buy.exchange)} / {BTN_SHORT} {_html.escape(second.sell.exchange)}"
         )
 
     lines.append("")
-    lines.append(f"Рекомендация: {BTN_LONG} на {_html.escape(best.buy.exchange)} / {BTN_SHORT} на {_html.escape(best.sell.exchange)}")
+    lines.append(T(lang, "arb_recommendation",
+                   btn_long=BTN_LONG, buy=_html.escape(best.buy.exchange),
+                   btn_short=BTN_SHORT, sell=_html.escape(best.sell.exchange)))
     return "\n".join(lines)
 
 # =========================
@@ -849,6 +1178,7 @@ async def mexc_fair_loop(session: aiohttp.ClientSession, store: Dict[str, Any], 
                 cs = get_chat_settings(store, chat_id)
                 meta = get_sub_meta(store, chat_id)
                 thread_id = cs.get("topic_fair") if should_use_topics(meta) else None
+                lang = cs.get("lang", DEFAULT_LANG)
 
                 fair_short_from = float(cs.get("fair_short_from", DEFAULT_CHAT_SETTINGS["fair_short_from"]))
                 fair_long_from = float(cs.get("fair_long_from", DEFAULT_CHAT_SETTINGS["fair_long_from"]))
@@ -894,16 +1224,13 @@ async def mexc_fair_loop(session: aiohttp.ClientSession, store: Dict[str, Any], 
                     lev_txt = lev_map.get(sym, "N/A")
                     url = mexc_trade_url(sym)
 
-                    text = (
-                        f"🔔 MEXC FAIR\n"
-                        f"Монета: {sym}\n"
-                        f"Направление: {side}\n"
-                        f"Спред: {spread*100:.2f}%\n"
-                        f"Объём торгов 24h: {fmt_usd(vol)}\n"
-                        f"Последняя цена: {fmt_price(lastp)}\n"
-                        f"Fair Price: {fmt_price(fair)}\n"
-                        f"Плечо: {lev_txt}"
-                    )
+                    text = T(lang, "fair_alert",
+                             sym=sym, side=side,
+                             spread=f"{spread*100:.2f}%",
+                             vol=fmt_usd(vol),
+                             lastp=fmt_price(lastp),
+                             fair=fmt_price(fair),
+                             lev=lev_txt)
                     buttons = [[{"text": f"{BTN_LONG if side=='LONG' else BTN_SHORT} MEXC", "url": url}]]
                     await tg_send(session, chat_id, text, buttons=buttons, thread_id=thread_id)
 
@@ -951,6 +1278,7 @@ async def arb_loop(session: aiohttp.ClientSession, store: Dict[str, Any], settin
                 cs = get_chat_settings(store, chat_id)
                 meta = get_sub_meta(store, chat_id)
                 thread_id = cs.get("topic_arb") if should_use_topics(meta) else None
+                lang = cs.get("lang", DEFAULT_LANG)
 
                 min_spread = float(cs.get("arb_min_price_spread", DEFAULT_CHAT_SETTINGS["arb_min_price_spread"]))
                 min_vol = float(cs.get("arb_min_volume_24h_usd", DEFAULT_CHAT_SETTINGS["arb_min_volume_24h_usd"]))
@@ -1004,7 +1332,7 @@ async def arb_loop(session: aiohttp.ClientSession, store: Dict[str, Any], settin
                     key_cd = f"{chat_id}:{sym}:{best.buy.exchange}:{best.sell.exchange}"
                     prev = last_alert_ts.get(key_cd, 0.0)
 
-                    text = make_arb_message(sym, rows_all, best, second, min_spread=min_spread)
+                    text = make_arb_message(sym, rows_all, best, second, min_spread=min_spread, lang=lang)
                     buttons = make_buttons(best, second)
 
                     msg_key = f"{chat_id}:{sym}"
@@ -1064,6 +1392,37 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                 except Exception:
                     continue
 
+                # ── Handle inline keyboard callbacks (language selection) ──
+                cbq = upd.get("callback_query")
+                if isinstance(cbq, dict):
+                    cbq_id = str(cbq.get("id", ""))
+                    cbq_data = str(cbq.get("data", ""))
+                    cbq_msg = cbq.get("message") or {}
+                    cbq_chat = cbq_msg.get("chat") or {}
+                    try:
+                        cbq_chat_id = int(cbq_chat.get("id"))
+                    except Exception:
+                        await tg_answer_callback(session, cbq_id)
+                        continue
+                    if cbq_data.startswith("set_lang:"):
+                        chosen = cbq_data.split(":", 1)[1]
+                        if chosen in SUPPORTED_LANGS:
+                            async with settings_lock:
+                                cbq_cs = get_chat_settings(store, cbq_chat_id)
+                                cbq_cs["lang"] = chosen
+                                save_data(store)
+                            await tg_answer_callback(session, cbq_id, T(chosen, "lang_set"))
+                            await tg_send(session, cbq_chat_id,
+                                          T(chosen, "subscribed",
+                                            topic_fair=cbq_cs.get("topic_fair"),
+                                            topic_arb=cbq_cs.get("topic_arb")))
+                        else:
+                            await tg_answer_callback(session, cbq_id)
+                    else:
+                        await tg_answer_callback(session, cbq_id)
+                    continue  # skip regular-message processing for this update
+
+                # ── Handle regular messages ──
                 msg = upd.get("message") or upd.get("edited_message")
                 if not isinstance(msg, dict):
                     continue
@@ -1085,55 +1444,34 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                 is_admin = (user_id in ADMIN_IDS) or await is_group_admin(session, chat_id, user_id, chat_type)
 
                 cs = get_chat_settings(store, chat_id)
+                lang = cs.get("lang", DEFAULT_LANG)
 
                 if text.startswith("/start"):
                     is_forum = bool(chat.get("is_forum"))
                     subscribe(store, chat_id, chat_type=chat_type, is_forum=is_forum)
+                    # Ask user to choose a language via buttons
+                    await tg_send(session, chat_id, LANG_CHOICE_TEXT, buttons=LANG_CHOICE_BUTTONS)
 
-                    await tg_send(
-                        session, chat_id,
-                        "✅ Подписка включена.\n"
-                        "Буду присылать:\n"
-                        f"1) MEXC FAIR (topic {cs.get('topic_fair')}, если это форум)\n"
-                        f"2) FUTURES ARB (topic {cs.get('topic_arb')}, если это форум)\n\n"
-                        "Помощь: /help\n"
-                        "Показать ID топика: /topic (напиши внутри топика)\n"
-                        "Отключить: /stop"
-                    )
+                elif text.startswith("/lang"):
+                    await tg_send(session, chat_id, LANG_CHOICE_TEXT, buttons=LANG_CHOICE_BUTTONS)
 
                 elif text.startswith("/stop"):
                     unsubscribe(store, chat_id)
-                    await tg_send(session, chat_id, "🛑 Подписка отключена.\nВключить снова: /start")
+                    await tg_send(session, chat_id, T(lang, "unsubscribed"))
 
                 elif text.startswith("/topic"):
                     thread_id = msg.get("message_thread_id")
                     if thread_id:
-                        await tg_send(session, chat_id, f"ID этого топика: {thread_id}")
+                        await tg_send(session, chat_id, T(lang, "topic_id", thread_id=thread_id))
                     else:
-                        await tg_send(session, chat_id, "Это не топик (или в чате не включены темы).")
+                        await tg_send(session, chat_id, T(lang, "no_topic"))
 
                 elif text.startswith("/help"):
-                    await tg_send(session, chat_id,
-                                  "Команды:\n"
-                                  "/start — подписаться\n"
-                                  "/stop — отписаться\n"
-                                  "/topic — показать ID топика (внутри топика)\n\n"
-                                  "Админ/настройки (для этого чата):\n"
-                                  "/topics fair=4 arb=7 — куда слать сигналы (топики, только в forum)\n"
-                                  "/arb_config — настройки арбитража\n"
-                                  "/arb_spread X — порог спреда (%), пример: /arb_spread 3\n"
-                                  "/arb_volume X — объём 24h, пример: /arb_volume 5m\n"
-                                  "/exchanges — список бирж\n"
-                                  "/ex_on NAME — включить биржу\n"
-                                  "/ex_off NAME — выключить биржу\n"
-                                  "/fair_config — настройки MEXC FAIR\n"
-                                  "/fair_short X — порог SHORT (%), пример: /fair_short 2\n"
-                                  "/fair_long X — порог LONG (%), пример: /fair_long 3\n"
-                                  "/fair_volume X — мин. объём 24h, пример: /fair_volume 5m")
+                    await tg_send(session, chat_id, T(lang, "help"))
 
                 elif text.startswith("/topics"):
                     if not is_admin:
-                        await tg_send(session, chat_id, "Нет доступа.")
+                        await tg_send(session, chat_id, T(lang, "no_access"))
                     else:
                         try:
                             parts = text.split()
@@ -1148,171 +1486,176 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                                 if "arb" in kv:
                                     cs["topic_arb"] = kv["arb"]
                                 save_data(store)
-                            await tg_send(session, chat_id, f"✅ Topics обновлены: fair={cs['topic_fair']} arb={cs['topic_arb']}")
+                            await tg_send(session, chat_id,
+                                          T(lang, "topics_updated",
+                                            topic_fair=cs["topic_fair"], topic_arb=cs["topic_arb"]))
                         except Exception:
-                            await tg_send(session, chat_id, "Формат: /topics fair=4 arb=7")
+                            await tg_send(session, chat_id, T(lang, "topics_format"))
 
                 elif text.startswith("/exchanges"):
                     enabled = cs.get("arb_enabled_exchanges", DEFAULT_CHAT_SETTINGS["arb_enabled_exchanges"])
                     await tg_send(session, chat_id,
-                                  "Биржи для ARB:\n"
-                                  "MEXC, Bybit, BingX, Binance, OKX, KuCoin, Gate\n\n"
-                                  f"✅ Включены сейчас: {', '.join(enabled)}")
+                                  T(lang, "exchanges_list", enabled=", ".join(enabled)))
 
                 elif text.startswith("/ex_on"):
                     if not is_admin:
-                        await tg_send(session, chat_id, "Нет доступа.")
+                        await tg_send(session, chat_id, T(lang, "no_access"))
                     else:
                         name = text.replace("/ex_on", "", 1).strip()
                         if not name:
-                            await tg_send(session, chat_id, "Пример: /ex_on BingX")
+                            await tg_send(session, chat_id, T(lang, "ex_on_hint"))
                             continue
                         async with settings_lock:
                             enabled = set(cs.get("arb_enabled_exchanges") or [])
                             enabled.add(name)
                             cs["arb_enabled_exchanges"] = sorted(enabled)
                             save_data(store)
-                        await tg_send(session, chat_id, f"✅ Включено: {name}")
+                        await tg_send(session, chat_id, T(lang, "ex_enabled", name=name))
 
                 elif text.startswith("/ex_off"):
                     if not is_admin:
-                        await tg_send(session, chat_id, "Нет доступа.")
+                        await tg_send(session, chat_id, T(lang, "no_access"))
                     else:
                         name = text.replace("/ex_off", "", 1).strip()
                         if not name:
-                            await tg_send(session, chat_id, "Пример: /ex_off BingX")
+                            await tg_send(session, chat_id, T(lang, "ex_off_hint"))
                             continue
                         async with settings_lock:
                             enabled = set(cs.get("arb_enabled_exchanges") or [])
                             enabled.discard(name)
                             cs["arb_enabled_exchanges"] = sorted(enabled)
                             save_data(store)
-                        await tg_send(session, chat_id, f"🛑 Выключено: {name}")
+                        await tg_send(session, chat_id, T(lang, "ex_disabled", name=name))
 
                 elif text.startswith("/arb_config"):
                     if not is_admin:
-                        await tg_send(session, chat_id, "Нет доступа.")
+                        await tg_send(session, chat_id, T(lang, "no_access"))
                     else:
                         await tg_send(session, chat_id,
-                                      "⚙️ Настройки ARB (для этого чата):\n"
-                                      f"- Порог спреда: {float(cs['arb_min_price_spread'])*100:.2f}%\n"
-                                      f"- Мин. объём 24h: {fmt_usd(float(cs['arb_min_volume_24h_usd']))}\n"
-                                      f"- Биржи: {', '.join(cs.get('arb_enabled_exchanges', []))}\n"
-                                      f"- Refresh: {ARB_REFRESH_SEC}s\n"
-                                      f"- Cooldown: {ARB_COOLDOWN_SEC}s\n"
-                                      f"- Вторая пара если хуже ≤ {SECOND_PAIR_MAX_GAP*100:.1f}%")
+                                      T(lang, "arb_config",
+                                        spread=f"{float(cs['arb_min_price_spread'])*100:.2f}%",
+                                        vol=fmt_usd(float(cs['arb_min_volume_24h_usd'])),
+                                        exchanges=", ".join(cs.get("arb_enabled_exchanges", [])),
+                                        refresh=ARB_REFRESH_SEC,
+                                        cooldown=ARB_COOLDOWN_SEC,
+                                        gap=f"{SECOND_PAIR_MAX_GAP*100:.1f}"))
 
                 elif text.startswith("/arb_spread"):
                     if not is_admin:
-                        await tg_send(session, chat_id, "Нет доступа.")
+                        await tg_send(session, chat_id, T(lang, "no_access"))
                     else:
                         parts = text.split(maxsplit=1)
                         if len(parts) < 2:
-                            await tg_send(session, chat_id, "Формат: /arb_spread 3  (это 3%)")
+                            await tg_send(session, chat_id, T(lang, "arb_spread_fmt"))
                             continue
                         try:
                             new_spread = parse_percent_arg(parts[1])
                             if new_spread <= 0 or new_spread >= 0.5:
-                                await tg_send(session, chat_id, "Слишком странное значение. Пример: 3 или 3%")
+                                await tg_send(session, chat_id, T(lang, "arb_spread_bad"))
                                 continue
                             async with settings_lock:
                                 cs["arb_min_price_spread"] = new_spread
                                 save_data(store)
-                            await tg_send(session, chat_id, f"✅ ARB порог спреда: {new_spread*100:.2f}%")
+                            await tg_send(session, chat_id,
+                                          T(lang, "arb_spread_ok", val=f"{new_spread*100:.2f}%"))
                         except Exception:
-                            await tg_send(session, chat_id, "Не понял число. Пример: /arb_spread 3")
+                            await tg_send(session, chat_id, T(lang, "arb_spread_err"))
 
                 elif text.startswith("/arb_volume"):
                     if not is_admin:
-                        await tg_send(session, chat_id, "Нет доступа.")
+                        await tg_send(session, chat_id, T(lang, "no_access"))
                     else:
                         parts = text.split(maxsplit=1)
                         if len(parts) < 2:
-                            await tg_send(session, chat_id, "Формат: /arb_volume 5m  или  /arb_volume 5000000")
+                            await tg_send(session, chat_id, T(lang, "arb_vol_fmt"))
                             continue
                         try:
                             new_vol = parse_usd_arg(parts[1])
                             if new_vol < 100_000:
-                                await tg_send(session, chat_id, "Слишком маленький объём. Пример: /arb_volume 5m")
+                                await tg_send(session, chat_id, T(lang, "arb_vol_small"))
                                 continue
                             async with settings_lock:
                                 cs["arb_min_volume_24h_usd"] = float(new_vol)
                                 save_data(store)
-                            await tg_send(session, chat_id, f"✅ ARB мин. объём 24h: {fmt_usd(float(new_vol))}")
+                            await tg_send(session, chat_id,
+                                          T(lang, "arb_vol_ok", val=fmt_usd(float(new_vol))))
                         except Exception:
-                            await tg_send(session, chat_id, "Не понял число. Пример: /arb_volume 5m")
+                            await tg_send(session, chat_id, T(lang, "arb_vol_err"))
 
                 elif text.startswith("/fair_config"):
                     if not is_admin:
-                        await tg_send(session, chat_id, "Нет доступа.")
+                        await tg_send(session, chat_id, T(lang, "no_access"))
                     else:
                         await tg_send(session, chat_id,
-                                      "⚙️ Настройки MEXC FAIR (для этого чата):\n"
-                                      f"- SHORT от: {float(cs['fair_short_from'])*100:.2f}%\n"
-                                      f"- LONG  от: {float(cs['fair_long_from'])*100:.2f}%\n"
-                                      f"- Мин. объём 24h: {fmt_usd(float(cs['fair_min_volume_24h_usd']))}\n"
-                                      f"- Refresh: {MEXC_FAIR_REFRESH_SEC}s\n"
-                                      f"- Cooldown: {MEXC_FAIR_COOLDOWN_SEC}s")
+                                      T(lang, "fair_config",
+                                        short=f"{float(cs['fair_short_from'])*100:.2f}%",
+                                        long=f"{float(cs['fair_long_from'])*100:.2f}%",
+                                        vol=fmt_usd(float(cs['fair_min_volume_24h_usd'])),
+                                        refresh=MEXC_FAIR_REFRESH_SEC,
+                                        cooldown=MEXC_FAIR_COOLDOWN_SEC))
 
                 elif text.startswith("/fair_short"):
                     if not is_admin:
-                        await tg_send(session, chat_id, "Нет доступа.")
+                        await tg_send(session, chat_id, T(lang, "no_access"))
                     else:
                         parts = text.split(maxsplit=1)
                         if len(parts) < 2:
-                            await tg_send(session, chat_id, "Формат: /fair_short 2  (это 2%)")
+                            await tg_send(session, chat_id, T(lang, "fair_short_fmt"))
                             continue
                         try:
                             v = parse_percent_arg(parts[1])
                             if v <= 0 or v >= 0.5:
-                                await tg_send(session, chat_id, "Слишком странное значение. Пример: 2 или 2%")
+                                await tg_send(session, chat_id, T(lang, "fair_short_bad"))
                                 continue
                             async with settings_lock:
                                 cs["fair_short_from"] = v
                                 save_data(store)
-                            await tg_send(session, chat_id, f"✅ MEXC FAIR SHORT: {v*100:.2f}%")
+                            await tg_send(session, chat_id,
+                                          T(lang, "fair_short_ok", val=f"{v*100:.2f}%"))
                         except Exception:
-                            await tg_send(session, chat_id, "Не понял число. Пример: /fair_short 2")
+                            await tg_send(session, chat_id, T(lang, "fair_short_err"))
 
                 elif text.startswith("/fair_long"):
                     if not is_admin:
-                        await tg_send(session, chat_id, "Нет доступа.")
+                        await tg_send(session, chat_id, T(lang, "no_access"))
                     else:
                         parts = text.split(maxsplit=1)
                         if len(parts) < 2:
-                            await tg_send(session, chat_id, "Формат: /fair_long 3  (это 3%)")
+                            await tg_send(session, chat_id, T(lang, "fair_long_fmt"))
                             continue
                         try:
                             v = parse_percent_arg(parts[1])
                             if v <= 0 or v >= 0.5:
-                                await tg_send(session, chat_id, "Слишком странное значение. Пример: 3 или 3%")
+                                await tg_send(session, chat_id, T(lang, "fair_long_bad"))
                                 continue
                             async with settings_lock:
                                 cs["fair_long_from"] = v
                                 save_data(store)
-                            await tg_send(session, chat_id, f"✅ MEXC FAIR LONG: {v*100:.2f}%")
+                            await tg_send(session, chat_id,
+                                          T(lang, "fair_long_ok", val=f"{v*100:.2f}%"))
                         except Exception:
-                            await tg_send(session, chat_id, "Не понял число. Пример: /fair_long 3")
+                            await tg_send(session, chat_id, T(lang, "fair_long_err"))
 
                 elif text.startswith("/fair_volume"):
                     if not is_admin:
-                        await tg_send(session, chat_id, "Нет доступа.")
+                        await tg_send(session, chat_id, T(lang, "no_access"))
                     else:
                         parts = text.split(maxsplit=1)
                         if len(parts) < 2:
-                            await tg_send(session, chat_id, "Формат: /fair_volume 5m  или  /fair_volume 5000000")
+                            await tg_send(session, chat_id, T(lang, "fair_vol_fmt"))
                             continue
                         try:
                             new_vol = parse_usd_arg(parts[1])
                             if new_vol < 100_000:
-                                await tg_send(session, chat_id, "Слишком маленький объём. Пример: /fair_volume 5m")
+                                await tg_send(session, chat_id, T(lang, "fair_vol_small"))
                                 continue
                             async with settings_lock:
                                 cs["fair_min_volume_24h_usd"] = float(new_vol)
                                 save_data(store)
-                            await tg_send(session, chat_id, f"✅ MEXC FAIR мин. объём 24h: {fmt_usd(float(new_vol))}")
+                            await tg_send(session, chat_id,
+                                          T(lang, "fair_vol_ok", val=fmt_usd(float(new_vol))))
                         except Exception:
-                            await tg_send(session, chat_id, "Не понял число. Пример: /fair_volume 5m")
+                            await tg_send(session, chat_id, T(lang, "fair_vol_err"))
 
         except Exception as e:
             print(f"Telegram loop error: {type(e).__name__}: {e}")
