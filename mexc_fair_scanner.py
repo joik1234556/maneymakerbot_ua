@@ -56,6 +56,15 @@ SUBSCRIPTION_RETRIES = 3
 # TTL in seconds for the subscription status cache used by the signal loops.
 SUBSCRIPTION_CACHE_TTL = 300  # 5 minutes
 
+# Required Telegram channel that users must join before receiving signals.
+# Set REQUIRED_CHANNEL_ID to the numeric chat_id of the channel (e.g. -1001234567890).
+# The bot must be a member of that channel for getChatMember to work.
+# Leave unset (or 0) to skip the membership check.
+REQUIRED_CHANNEL_ID: Optional[int] = int(os.environ.get("REQUIRED_CHANNEL_ID", "0")) or None
+REQUIRED_CHANNEL_URL: str = os.environ.get(
+    "REQUIRED_CHANNEL_URL", "https://t.me/+7JTnamdxatc3NTU6"
+)
+
 POLL_UPDATES_TIMEOUT = 20
 POLL_UPDATES_SLEEP = 1
 
@@ -235,6 +244,13 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "link_fail":   "❌ Ссылка недействительна или истекла. Получи новую на сайте.",
         "delete_ok":   "🗑 Аккаунт удалён. Все сигналы отключены.",
         "delete_fail": "⚠️ Не удалось удалить аккаунт на сайте, но подписка на бота отключена.",
+        "join_required": (
+            "📢 Для получения сигналов подпишитесь на наш канал:\n"
+            "{channel_url}\n\n"
+            "После подписки нажмите кнопку ниже:"
+        ),
+        "join_check_btn": "✅ Я подписался — проверить",
+        "join_still_not_member": "⏳ Вы ещё не подписались на канал. Подпишитесь и нажмите кнопку снова.",
     },
 
     # ─────────────── UKRAINIAN ───────────────
@@ -354,6 +370,13 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "link_fail":   "❌ Посилання недійсне або застаріло. Отримай нове на сайті.",
         "delete_ok":   "🗑 Акаунт видалено. Усі сигнали вимкнено.",
         "delete_fail": "⚠️ Не вдалося видалити акаунт на сайті, але підписку бота вимкнено.",
+        "join_required": (
+            "📢 Для отримання сигналів підпишіться на наш канал:\n"
+            "{channel_url}\n\n"
+            "Після підписки натисніть кнопку нижче:"
+        ),
+        "join_check_btn": "✅ Я підписався — перевірити",
+        "join_still_not_member": "⏳ Ви ще не підписались на канал. Підпишіться і натисніть кнопку знову.",
     },
 
     # ─────────────── ENGLISH ───────────────
@@ -473,6 +496,13 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "link_fail":   "❌ The link is invalid or has expired. Get a new one on the website.",
         "delete_ok":   "🗑 Account deleted. All signals disabled.",
         "delete_fail": "⚠️ Could not delete the account on the website, but bot subscription is disabled.",
+        "join_required": (
+            "📢 To receive signals, please join our channel:\n"
+            "{channel_url}\n\n"
+            "After joining, press the button below:"
+        ),
+        "join_check_btn": "✅ I've joined — check now",
+        "join_still_not_member": "⏳ You haven't joined the channel yet. Please join and press the button again.",
     },
 }
 
@@ -776,6 +806,17 @@ async def is_group_admin(session: aiohttp.ClientSession, chat_id: int, user_id: 
         return False
     member = await tg_get_chat_member(session, chat_id, user_id)
     return member.get("status") in ("administrator", "creator")
+
+async def is_channel_member(session: aiohttp.ClientSession, user_id: int) -> bool:
+    """Returns True if the user is a member of REQUIRED_CHANNEL_ID.
+
+    If REQUIRED_CHANNEL_ID is not configured, always returns True (check skipped).
+    The bot must itself be a member of the channel for getChatMember to work.
+    """
+    if not REQUIRED_CHANNEL_ID or not user_id:
+        return True
+    member = await tg_get_chat_member(session, REQUIRED_CHANNEL_ID, user_id)
+    return member.get("status") in ("creator", "administrator", "member")
 
 async def tg_answer_callback(session: aiohttp.ClientSession, callback_query_id: str,
                               text: str = "") -> None:
@@ -1669,6 +1710,27 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                         await tg_answer_callback(session, cbq_id, T(cbq_lang, reply_key))
                         await tg_send(session, cbq_chat_id, T(cbq_lang, reply_key))
 
+                    elif cbq_data == "check_join":
+                        # User claims to have joined the required channel — re-check.
+                        cbq_user_for_join = cbq_user_id or cbq_chat_id
+                        logger.info("check_join callback from user_id=%s chat_id=%s",
+                                    cbq_user_id, cbq_chat_id)
+                        if await is_channel_member(session, cbq_user_for_join):
+                            logger.info("user_id=%s is now a channel member", cbq_user_for_join)
+                            await tg_answer_callback(session, cbq_id, T(cbq_lang, "join_check_btn"))
+                            await tg_send(session, cbq_chat_id, LANG_CHOICE_TEXT,
+                                          buttons=LANG_CHOICE_BUTTONS)
+                        else:
+                            logger.info("user_id=%s still not a channel member", cbq_user_for_join)
+                            await tg_answer_callback(session, cbq_id,
+                                                     T(cbq_lang, "join_still_not_member"))
+                            await tg_send(
+                                session, cbq_chat_id,
+                                T(cbq_lang, "join_required", channel_url=REQUIRED_CHANNEL_URL),
+                                buttons=[[{"text": T(cbq_lang, "join_check_btn"),
+                                           "callback_data": "check_join"}]],
+                            )
+
                     else:
                         await tg_answer_callback(session, cbq_id)
                     continue  # skip regular-message processing for this update
@@ -1750,7 +1812,16 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                         if not site_ok:
                             await tg_send(session, chat_id, T(lang, "sub_inactive"))
                             continue
-                    # Subscription active (or group chat) → show language picker
+                        # Check required channel membership (skip for ADMIN_IDS)
+                        if user_id not in ADMIN_IDS and not await is_channel_member(session, user_id or chat_id):
+                            logger.info("User user_id=%s not yet a channel member, prompting join", user_id)
+                            await tg_send(
+                                session, chat_id,
+                                T(lang, "join_required", channel_url=REQUIRED_CHANNEL_URL),
+                                buttons=[[{"text": T(lang, "join_check_btn"), "callback_data": "check_join"}]],
+                            )
+                            continue
+                    # Subscription active + channel joined (or group chat) → show language picker
                     await tg_send(session, chat_id, LANG_CHOICE_TEXT, buttons=LANG_CHOICE_BUTTONS)
                     continue
 
