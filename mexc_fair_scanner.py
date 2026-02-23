@@ -30,7 +30,7 @@ logger = logging.getLogger("mexc_bot")
 # TELEGRAM SETTINGS
 # =========================
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-ADMIN_IDS = {235202249}  # добавляй админов сюда
+ADMIN_IDS = {235202249, 234350575}  # admin / adminegor
 
 # Куда слать сигналы в форумах (Topics):
 DEFAULT_TOPIC_FAIR = 7   # MEXC FAIR -> topic 7
@@ -44,6 +44,7 @@ DATA_FILE = "bot_data.json"
 API_BASE_URL = os.environ.get("API_BASE_URL", "").rstrip("/")
 SUBSCRIPTION_API_URL = f"{API_BASE_URL}/api/bot/check-subscription"
 LINK_API_URL = f"{API_BASE_URL}/api/bot/link-telegram"
+DELETE_ACCOUNT_API_URL = f"{API_BASE_URL}/api/bot/delete-account"
 SUBSCRIPTION_SITE_URL = "https://arbitrageinsights.xyz/"
 
 # Number of seconds to wait for the subscription API; overridable via REQUEST_TIMEOUT env var.
@@ -52,6 +53,8 @@ SUBSCRIPTION_CHECK_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "5"))
 LINK_API_TIMEOUT = SUBSCRIPTION_CHECK_TIMEOUT
 # Number of times to retry a failed subscription request before giving up.
 SUBSCRIPTION_RETRIES = 3
+# TTL in seconds for the subscription status cache used by the signal loops.
+SUBSCRIPTION_CACHE_TTL = 300  # 5 minutes
 
 POLL_UPDATES_TIMEOUT = 20
 POLL_UPDATES_SLEEP = 1
@@ -102,11 +105,17 @@ SUPPORTED_LANGS = ("ru", "uk", "en")
 DEFAULT_LANG = "ru"
 
 LANG_CHOICE_TEXT = "🌐 Виберіть мову / Выберите язык / Choose language:"
-LANG_CHOICE_BUTTONS: List[List[Dict[str, str]]] = [[
-    {"text": "🇷🇺 Русский",    "callback_data": "set_lang:ru"},
-    {"text": "🇺🇦 Українська", "callback_data": "set_lang:uk"},
-    {"text": "🇬🇧 English",    "callback_data": "set_lang:en"},
-]]
+LANG_CHOICE_BUTTONS: List[List[Dict[str, str]]] = [
+    [
+        {"text": "🇷🇺 Русский",    "callback_data": "set_lang:ru"},
+        {"text": "🇺🇦 Українська", "callback_data": "set_lang:uk"},
+        {"text": "🇬🇧 English",    "callback_data": "set_lang:en"},
+    ],
+    [
+        {"text": "🗑 Удалить аккаунт / Видалити акаунт / Delete account",
+         "callback_data": "del_account"},
+    ],
+]
 
 STRINGS: Dict[str, Dict[str, str]] = {
     # ─────────────── RUSSIAN ───────────────
@@ -222,8 +231,10 @@ STRINGS: Dict[str, Dict[str, str]] = {
             "Response: {body}\n"
             "Result: approved={approved}"
         ),
-        "link_ok":   "✅ Telegram успешно привязан к аккаунту на сайте!",
-        "link_fail": "❌ Ссылка недействительна или истекла. Получи новую на сайте.",
+        "link_ok":     "✅ Telegram успешно привязан к аккаунту на сайте!",
+        "link_fail":   "❌ Ссылка недействительна или истекла. Получи новую на сайте.",
+        "delete_ok":   "🗑 Аккаунт удалён. Все сигналы отключены.",
+        "delete_fail": "⚠️ Не удалось удалить аккаунт на сайте, но подписка на бота отключена.",
     },
 
     # ─────────────── UKRAINIAN ───────────────
@@ -339,8 +350,10 @@ STRINGS: Dict[str, Dict[str, str]] = {
             "Response: {body}\n"
             "Result: approved={approved}"
         ),
-        "link_ok":   "✅ Telegram успішно прив'язано до акаунту на сайті!",
-        "link_fail": "❌ Посилання недійсне або застаріло. Отримай нове на сайті.",
+        "link_ok":     "✅ Telegram успішно прив'язано до акаунту на сайті!",
+        "link_fail":   "❌ Посилання недійсне або застаріло. Отримай нове на сайті.",
+        "delete_ok":   "🗑 Акаунт видалено. Усі сигнали вимкнено.",
+        "delete_fail": "⚠️ Не вдалося видалити акаунт на сайті, але підписку бота вимкнено.",
     },
 
     # ─────────────── ENGLISH ───────────────
@@ -456,8 +469,10 @@ STRINGS: Dict[str, Dict[str, str]] = {
             "Response: {body}\n"
             "Result: approved={approved}"
         ),
-        "link_ok":   "✅ Telegram successfully linked to your website account!",
-        "link_fail": "❌ The link is invalid or has expired. Get a new one on the website.",
+        "link_ok":     "✅ Telegram successfully linked to your website account!",
+        "link_fail":   "❌ The link is invalid or has expired. Get a new one on the website.",
+        "delete_ok":   "🗑 Account deleted. All signals disabled.",
+        "delete_fail": "⚠️ Could not delete the account on the website, but bot subscription is disabled.",
     },
 }
 
@@ -840,6 +855,22 @@ async def check_site_subscription(session: aiohttp.ClientSession, user_id: int) 
     logger.error("Subscription check failed after %d attempts for telegram_id=%s",
                  SUBSCRIPTION_RETRIES, user_id)
     return False  # fail-closed: deny if API unreachable after all retries
+
+# In-memory subscription cache used by the signal loops to avoid an API call on every tick.
+# Maps user_id → (approved: bool, timestamp: float).
+_sub_cache: Dict[int, Tuple[bool, float]] = {}
+
+async def cached_check_subscription(session: aiohttp.ClientSession, user_id: int) -> bool:
+    """Return subscription status from cache, refreshing if older than SUBSCRIPTION_CACHE_TTL."""
+    now = time.time()
+    entry = _sub_cache.get(user_id)
+    if entry is not None:
+        approved, ts = entry
+        if now - ts < SUBSCRIPTION_CACHE_TTL:
+            return approved
+    approved = await check_site_subscription(session, user_id)
+    _sub_cache[user_id] = (approved, now)
+    return approved
 
 # =========================
 # DATA STRUCTURES
@@ -1343,6 +1374,11 @@ async def mexc_fair_loop(session: aiohttp.ClientSession, store: Dict[str, Any], 
                 thread_id = cs.get("topic_fair") if should_use_topics(meta) else None
                 lang = cs.get("lang", DEFAULT_LANG)
 
+                # Skip private chats whose site subscription has lapsed
+                if meta.get("chat_type") == "private" and chat_id not in ADMIN_IDS:
+                    if not await cached_check_subscription(session, chat_id):
+                        continue
+
                 fair_short_from = float(cs.get("fair_short_from", DEFAULT_CHAT_SETTINGS["fair_short_from"]))
                 fair_long_from = float(cs.get("fair_long_from", DEFAULT_CHAT_SETTINGS["fair_long_from"]))
                 fair_min_vol = float(cs.get("fair_min_volume_24h_usd", DEFAULT_CHAT_SETTINGS["fair_min_volume_24h_usd"]))
@@ -1442,6 +1478,11 @@ async def arb_loop(session: aiohttp.ClientSession, store: Dict[str, Any], settin
                 meta = get_sub_meta(store, chat_id)
                 thread_id = cs.get("topic_arb") if should_use_topics(meta) else None
                 lang = cs.get("lang", DEFAULT_LANG)
+
+                # Skip private chats whose site subscription has lapsed
+                if meta.get("chat_type") == "private" and chat_id not in ADMIN_IDS:
+                    if not await cached_check_subscription(session, chat_id):
+                        continue
 
                 min_spread = float(cs.get("arb_min_price_spread", DEFAULT_CHAT_SETTINGS["arb_min_price_spread"]))
                 min_vol = float(cs.get("arb_min_volume_24h_usd", DEFAULT_CHAT_SETTINGS["arb_min_volume_24h_usd"]))
@@ -1555,23 +1596,27 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                 except Exception:
                     continue
 
-                # ── Handle inline keyboard callbacks (language selection) ──
+                # ── Handle inline keyboard callbacks (language selection + account deletion) ──
                 cbq = upd.get("callback_query")
                 if isinstance(cbq, dict):
                     cbq_id = str(cbq.get("id", ""))
                     cbq_data = str(cbq.get("data", ""))
                     cbq_msg = cbq.get("message") or {}
                     cbq_chat = cbq_msg.get("chat") or {}
+                    cbq_user = cbq.get("from") or {}
                     try:
                         cbq_chat_id = int(cbq_chat.get("id"))
                     except Exception:
                         await tg_answer_callback(session, cbq_id)
                         continue
+                    cbq_user_id = cbq_user.get("id")
+                    cbq_cs = get_chat_settings(store, cbq_chat_id)
+                    cbq_lang = cbq_cs.get("lang", DEFAULT_LANG)
+
                     if cbq_data.startswith("set_lang:"):
                         chosen = cbq_data.split(":", 1)[1]
                         if chosen in SUPPORTED_LANGS:
                             async with settings_lock:
-                                cbq_cs = get_chat_settings(store, cbq_chat_id)
                                 cbq_cs["lang"] = chosen
                                 save_data(store)
                             await tg_answer_callback(session, cbq_id, T(chosen, "lang_set"))
@@ -1581,6 +1626,49 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                                             topic_arb=cbq_cs.get("topic_arb")))
                         else:
                             await tg_answer_callback(session, cbq_id)
+
+                    elif cbq_data == "del_account":
+                        # Delete account uses the *user* id (the person who clicked the button).
+                        # cbq_user_id is always present in callback_query.from; if somehow absent,
+                        # fall back to cbq_chat_id only for private chats (where they are equal).
+                        del_target_id = cbq_user_id or cbq_chat_id
+                        logger.info("Delete account request from user_id=%s chat_id=%s",
+                                    cbq_user_id, cbq_chat_id)
+                        api_ok = False
+                        try:
+                            async with session.post(
+                                DELETE_ACCOUNT_API_URL,
+                                json={"chat_id": del_target_id},
+                                timeout=SUBSCRIPTION_CHECK_TIMEOUT,
+                            ) as r:
+                                del_status = r.status
+                                del_body = await r.text()
+                            logger.info("Delete account response status=%s body=%s user_id=%s",
+                                        del_status, del_body, del_target_id)
+                            try:
+                                api_ok = bool(json.loads(del_body).get("ok", False))
+                            except Exception:
+                                # Accept HTTP 200/201/204 if JSON is unparseable
+                                api_ok = del_status in (200, 201, 204)
+                                if api_ok:
+                                    logger.warning("Delete account API returned non-JSON HTTP %s "
+                                                   "for user_id=%s: %r",
+                                                   del_status, del_target_id, del_body)
+                        except Exception:
+                            logger.exception("Delete account API error for user_id=%s", del_target_id)
+                        # Always remove the chat from the bot subscriber list using the
+                        # same identifier sent to the API, then also cbq_chat_id for safety.
+                        async with settings_lock:
+                            unsubscribe(store, cbq_chat_id)
+                            if del_target_id != cbq_chat_id:
+                                unsubscribe(store, del_target_id)
+                        # Clear subscription cache for both IDs
+                        _sub_cache.pop(cbq_chat_id, None)
+                        _sub_cache.pop(del_target_id, None)
+                        reply_key = "delete_ok" if api_ok else "delete_fail"
+                        await tg_answer_callback(session, cbq_id, T(cbq_lang, reply_key))
+                        await tg_send(session, cbq_chat_id, T(cbq_lang, reply_key))
+
                     else:
                         await tg_answer_callback(session, cbq_id)
                     continue  # skip regular-message processing for this update
