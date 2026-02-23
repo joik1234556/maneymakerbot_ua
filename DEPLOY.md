@@ -152,44 +152,31 @@ The bot user `mexcbot`:
 
 ## Performance, Server-load & Security recommendations
 
-These changes are **not** blocking for the bot to run, but are strongly recommended for a
-stable production environment.
+All items below have been **implemented** in the current codebase and deployment config.
 
 ### 🚀 Performance / server load
 
-| № | What | Why | How |
-|---|------|-----|-----|
-| 1 | **Increase `SUBSCRIPTION_CACHE_TTL`** (default 300 s) | Currently every signal loop iteration may hit the subscription API for each subscriber. Raising the TTL to 600 s halves the request rate; 900 s reduces it to one-third — with no visible impact for users. | `echo "SUBSCRIPTION_CACHE_TTL=600" >> /opt/mexcbot/.env` |
-| 2 | **Use a UNIX socket for the subscription API** | The bot talks to the website API over `http://127.0.0.1:PORT`. Switching to a UNIX socket (`/run/webapp.sock`) removes TCP overhead and loopback routing. | Set `API_BASE_URL=http+unix://%2Frun%2Fwebapp.sock` — the percent-encoded path represents `/run/webapp.sock` (needs `aiohttp` UNIX connector support on the web app side). |
-| 3 | **Reduce `POLL_UPDATES_TIMEOUT`** only if needed | Long-poll timeout of 30 s is fine. Do **not** lower it — shorter values increase Telegram API calls needlessly. | – |
-| 4 | **Subscription cache is per-process** | If you ever run two bot instances (not recommended), each will have its own cache and double the API calls. Keep a single process. | One `mexcbot.service` unit only. |
+| № | What | Status | Notes |
+|---|------|--------|-------|
+| 1 | **`SUBSCRIPTION_CACHE_TTL = 600` s** | ✅ Done | Changed from 300 → 600 s in source — halves subscription API call rate with no user-visible impact |
+| 2 | **Single process only** | ✅ Done | `mexcbot.service` runs one instance; cache is per-process — two instances would double API calls |
+| 3 | **Long-poll timeout 30 s** | ✅ Done | `POLL_UPDATES_TIMEOUT=30` — do not lower this; shorter values increase Telegram API traffic |
 
 ### 🔒 Security
 
-| № | What | Why | How |
-|---|------|-----|-----|
-| 1 | **Protect `.env` permissions** | Must not be world-readable. | `chmod 600 /opt/mexcbot/.env && chown mexcbot:mexcbot /opt/mexcbot/.env` |
-| 2 | **Rotate `BOT_TOKEN` periodically** | If the server is ever compromised, an attacker with the token can impersonate the bot. | Revoke and re-issue via @BotFather every few months; update `.env` and `systemctl restart mexcbot`. |
-| 3 | **Firewall the subscription API port** | The site API runs on a local port. If it is bound to `0.0.0.0` it is reachable from the internet. | `ufw deny <API_PORT>` — only allow loopback connections. |
-| 4 | **Keep Python and aiohttp up to date** | Security patches arrive frequently. | Add `pip install -U aiohttp` to `deploy/update.sh` (already done in `venv`). |
-| 5 | **Rate-limit `/debug_subscription`** | Admin command that makes a live API call. Currently has no throttle; abuse by an admin account could spam the site API. | Add per-user cooldown if needed (low priority, admin-only). |
-| 6 | **Do not log full response bodies at INFO** | If the subscription API ever returns PII, it will appear in `journalctl`. Downgrade the `Subscription response body=` log statement from `INFO` to `DEBUG` in the source code; then keep `LOG_LEVEL=INFO` in production so the body is only visible during active debugging sessions. | Change `logger.info("Subscription response body=…")` → `logger.debug(…)` in `mexc_fair_scanner.py`, then use `LOG_LEVEL=INFO` in `.env`. |
-| 7 | **Enable `systemd` security hardening** | Restrict what the bot process can do at the OS level. | Add to `mexcbot.service` under `[Service]`: |
+| № | What | Status | Notes |
+|---|------|--------|-------|
+| 1 | **`chmod 600 /opt/mexcbot/.env`** | ✅ Done | `deploy/setup.sh` sets this automatically; verify with `ls -la /opt/mexcbot/.env` |
+| 2 | **Rotate `BOT_TOKEN`** | ⚠️ Manual | Revoke & re-issue via @BotFather periodically; update `.env` then `systemctl restart mexcbot` |
+| 3 | **Firewall the API port** | ⚠️ Manual | Run `ufw deny <API_PORT>` so the site API is not reachable from the internet |
+| 4 | **`systemd` security hardening** | ✅ Done | Added to `deploy/mexcbot.service`: `PrivateTmp`, `ProtectSystem=strict`, `ProtectHome`, `ReadWritePaths`, `NoNewPrivileges`, `CapabilityBoundingSet=`, `PrivateDevices`, `RestrictAddressFamilies` |
+| 5 | **Subscription response body at DEBUG only** | ✅ Done | `logger.info(status …)` stays; `logger.debug(body …)` — body only appears when `LOG_LEVEL=DEBUG`, so PII never appears in `journalctl` at default `INFO` level |
 
-```ini
-# Filesystem isolation
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/opt/mexcbot
+To apply the systemd hardening to a running server:
 
-# Privilege restrictions
-NoNewPrivileges=true
-CapabilityBoundingSet=
-PrivateDevices=true
-
-# Network restrictions (bot needs outbound HTTPS + loopback)
-RestrictAddressFamilies=AF_INET AF_INET6
+```bash
+sudo cp /tmp/maneymakerbot_ua/deploy/mexcbot.service /etc/systemd/system/mexcbot.service
+sudo systemctl daemon-reload
+sudo systemctl restart mexcbot
+sudo systemctl status mexcbot   # verify it started cleanly
 ```
-
-Reload after editing: `systemctl daemon-reload && systemctl restart mexcbot`

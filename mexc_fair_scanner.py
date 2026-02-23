@@ -54,7 +54,7 @@ LINK_API_TIMEOUT = SUBSCRIPTION_CHECK_TIMEOUT
 # Number of times to retry a failed subscription request before giving up.
 SUBSCRIPTION_RETRIES = 3
 # TTL in seconds for the subscription status cache used by the signal loops.
-SUBSCRIPTION_CACHE_TTL = 300  # 5 minutes
+SUBSCRIPTION_CACHE_TTL = 600  # 10 minutes — halves API call rate vs 300 s
 
 # Required Telegram channel that users must join before receiving signals.
 # Set REQUIRED_CHANNEL_ID to the numeric chat_id of the channel (e.g. -1001234567890).
@@ -847,8 +847,9 @@ async def check_site_subscription(session: aiohttp.ClientSession, user_id: int) 
                 body = await r.text()
             elapsed = time.time() - t0
 
-            logger.info("Subscription response status=%s body=%s (%.2fs, attempt %d/%d)",
-                        status, body, elapsed, attempt, SUBSCRIPTION_RETRIES)
+            logger.info("Subscription response status=%s (%.2fs, attempt %d/%d)",
+                        status, elapsed, attempt, SUBSCRIPTION_RETRIES)
+            logger.debug("Subscription response body=%s", body)
 
             # ── Strict: only HTTP 200 is accepted ────────────────────────────
             if status != 200:

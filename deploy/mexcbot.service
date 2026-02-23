@@ -29,5 +29,20 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=mexcbot
 
+# ── systemd security hardening ──────────────────────────────────────────────
+# Filesystem isolation: bot can only write to its own directory
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/mexcbot
+
+# Privilege restrictions: bot cannot gain new capabilities
+NoNewPrivileges=true
+CapabilityBoundingSet=
+PrivateDevices=true
+
+# Network: allow only IPv4/IPv6 (outbound HTTPS to Telegram + loopback to API)
+RestrictAddressFamilies=AF_INET AF_INET6
+
 [Install]
 WantedBy=multi-user.target
