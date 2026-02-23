@@ -120,10 +120,6 @@ LANG_CHOICE_BUTTONS: List[List[Dict[str, str]]] = [
         {"text": "🇺🇦 Українська", "callback_data": "set_lang:uk"},
         {"text": "🇬🇧 English",    "callback_data": "set_lang:en"},
     ],
-    [
-        {"text": "🗑 Удалить аккаунт / Видалити акаунт / Delete account",
-         "callback_data": "del_account"},
-    ],
 ]
 
 STRINGS: Dict[str, Dict[str, str]] = {
@@ -1825,13 +1821,25 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                     await tg_send(session, chat_id, LANG_CHOICE_TEXT, buttons=LANG_CHOICE_BUTTONS)
                     continue
 
-                # ── For private chats, all other commands require active website subscription ──
+                # ── For private chats, all other commands require active website subscription
+                #    AND membership of the required channel ──
                 if chat_type == "private" and user_id not in ADMIN_IDS:
                     site_ok = await check_site_subscription(session, user_id or chat_id)
                     if not site_ok:
                         await tg_send(session, chat_id, T(lang, "sub_inactive"))
                         continue
-                    # Subscribed private-chat users have full access to all commands
+                    # Website subscription confirmed — now check channel membership
+                    if not await is_channel_member(session, user_id or chat_id):
+                        logger.info("Blocked command (not channel member) user_id=%s text=%r",
+                                    user_id, text)
+                        await tg_send(
+                            session, chat_id,
+                            T(lang, "join_required", channel_url=REQUIRED_CHANNEL_URL),
+                            buttons=[[{"text": T(lang, "join_check_btn"),
+                                       "callback_data": "check_join"}]],
+                        )
+                        continue
+                    # Subscribed + channel member → full access
                     is_admin = True
 
                 if text.startswith("/lang"):
