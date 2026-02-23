@@ -22,6 +22,11 @@ DEFAULT_TOPIC_ARB = 4    # ARB -> topic 4
 
 DATA_FILE = "bot_data.json"
 
+# Website subscription check endpoint (IP used directly to avoid DNS issues)
+SUBSCRIPTION_API_URL = "http://89.167.53.202/api/bot/check-subscription"
+SUBSCRIPTION_SITE_URL = "https://arbitrageinsights.xyz/"
+SUBSCRIPTION_CHECK_TIMEOUT = 10  # seconds
+
 POLL_UPDATES_TIMEOUT = 20
 POLL_UPDATES_SLEEP = 1
 
@@ -172,6 +177,11 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "arb_pairs_header":     "Пары (лучшая + вторая, если близко):",
         "arb_below_thresh":     " (ниже порога)",
         "arb_recommendation":   "Рекомендация: {btn_long} на {buy} / {btn_short} на {sell}",
+        "sub_inactive": (
+            "❌ Подписка не активна.\n"
+            "Зарегистрируйтесь на сайте https://arbitrageinsights.xyz/\n"
+            "или обратитесь к администратору."
+        ),
     },
 
     # ─────────────── UKRAINIAN ───────────────
@@ -268,6 +278,11 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "arb_pairs_header":     "Пари (найкраща + друга, якщо близько):",
         "arb_below_thresh":     " (нижче порогу)",
         "arb_recommendation":   "Рекомендація: {btn_long} на {buy} / {btn_short} на {sell}",
+        "sub_inactive": (
+            "❌ Підписка не активна.\n"
+            "Зареєструйтесь на сайті https://arbitrageinsights.xyz/\n"
+            "або зверніться до адміністратора."
+        ),
     },
 
     # ─────────────── ENGLISH ───────────────
@@ -364,6 +379,11 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "arb_pairs_header":     "Pairs (best + second, if close):",
         "arb_below_thresh":     " (below threshold)",
         "arb_recommendation":   "Recommendation: {btn_long} on {buy} / {btn_short} on {sell}",
+        "sub_inactive": (
+            "❌ Subscription is not active.\n"
+            "Register at https://arbitrageinsights.xyz/\n"
+            "or contact the administrator."
+        ),
     },
 }
 
@@ -677,6 +697,24 @@ async def tg_answer_callback(session: aiohttp.ClientSession, callback_query_id: 
             await r.read()
     except Exception:
         pass
+
+async def check_site_subscription(session: aiohttp.ClientSession, user_id: int) -> bool:
+    """Returns True if the user has an active subscription on arbitrageinsights.xyz.
+    Falls back to True on network/API errors to avoid blocking users when the site is down."""
+    try:
+        async with session.get(SUBSCRIPTION_API_URL,
+                               params={"chat_id": user_id},
+                               timeout=SUBSCRIPTION_CHECK_TIMEOUT) as r:
+            # content_type=None allows JSON parsing even if the server sends a
+            # non-standard Content-Type header (e.g. text/plain).
+            data = await r.json(content_type=None)
+        if isinstance(data, dict):
+            return bool(data.get("approved", False))
+        print(f"check_site_subscription unexpected response [user {user_id}]: {data!r}")
+        return False
+    except Exception as exc:
+        print(f"check_site_subscription error [user {user_id}]: {exc}")
+        return True  # fail-open: allow if API unreachable
 
 # =========================
 # DATA STRUCTURES
@@ -1446,13 +1484,28 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                 cs = get_chat_settings(store, chat_id)
                 lang = cs.get("lang", DEFAULT_LANG)
 
+                # ── /start: always available in all chat types ──
                 if text.startswith("/start"):
                     is_forum = bool(chat.get("is_forum"))
                     subscribe(store, chat_id, chat_type=chat_type, is_forum=is_forum)
-                    # Ask user to choose a language via buttons
+                    if chat_type == "private":
+                        # Check website subscription for private chats
+                        site_ok = await check_site_subscription(session, user_id or chat_id)
+                        if not site_ok:
+                            await tg_send(session, chat_id, T(lang, "sub_inactive"))
+                            continue
+                    # Subscription active (or group chat) → show language picker
                     await tg_send(session, chat_id, LANG_CHOICE_TEXT, buttons=LANG_CHOICE_BUTTONS)
+                    continue
 
-                elif text.startswith("/lang"):
+                # ── For private chats, all other commands require active website subscription ──
+                if chat_type == "private" and user_id not in ADMIN_IDS:
+                    site_ok = await check_site_subscription(session, user_id or chat_id)
+                    if not site_ok:
+                        await tg_send(session, chat_id, T(lang, "sub_inactive"))
+                        continue
+
+                if text.startswith("/lang"):
                     await tg_send(session, chat_id, LANG_CHOICE_TEXT, buttons=LANG_CHOICE_BUTTONS)
 
                 elif text.startswith("/stop"):
