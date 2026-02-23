@@ -1760,6 +1760,8 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                     if not site_ok:
                         await tg_send(session, chat_id, T(lang, "sub_inactive"))
                         continue
+                    # Subscribed private-chat users have full access to all commands
+                    is_admin = True
 
                 if text.startswith("/lang"):
                     await tg_send(session, chat_id, LANG_CHOICE_TEXT, buttons=LANG_CHOICE_BUTTONS)
@@ -1849,16 +1851,7 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                     unsubscribe(store, chat_id)
                     await tg_send(session, chat_id, T(lang, "unsubscribed"))
 
-                elif text.startswith("/topic"):
-                    thread_id = msg.get("message_thread_id")
-                    if thread_id:
-                        await tg_send(session, chat_id, T(lang, "topic_id", thread_id=thread_id))
-                    else:
-                        await tg_send(session, chat_id, T(lang, "no_topic"))
-
-                elif text.startswith("/help"):
-                    await tg_send(session, chat_id, T(lang, "help"))
-
+                # NOTE: /topics must come before /topic to avoid the prefix being eaten
                 elif text.startswith("/topics"):
                     if not is_admin:
                         await tg_send(session, chat_id, T(lang, "no_access"))
@@ -1881,6 +1874,16 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                                             topic_fair=cs["topic_fair"], topic_arb=cs["topic_arb"]))
                         except Exception:
                             await tg_send(session, chat_id, T(lang, "topics_format"))
+
+                elif text.startswith("/topic"):
+                    thread_id = msg.get("message_thread_id")
+                    if thread_id:
+                        await tg_send(session, chat_id, T(lang, "topic_id", thread_id=thread_id))
+                    else:
+                        await tg_send(session, chat_id, T(lang, "no_topic"))
+
+                elif text.startswith("/help"):
+                    await tg_send(session, chat_id, T(lang, "help"))
 
                 elif text.startswith("/exchanges"):
                     enabled = cs.get("arb_enabled_exchanges", DEFAULT_CHAT_SETTINGS["arb_enabled_exchanges"])
