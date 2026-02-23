@@ -43,10 +43,13 @@ DATA_FILE = "bot_data.json"
 # No default is provided intentionally: the bot exits at startup if this is missing.
 API_BASE_URL = os.environ.get("API_BASE_URL", "").rstrip("/")
 SUBSCRIPTION_API_URL = f"{API_BASE_URL}/api/bot/check-subscription"
+LINK_API_URL = f"{API_BASE_URL}/api/bot/link-telegram"
 SUBSCRIPTION_SITE_URL = "https://arbitrageinsights.xyz/"
 
 # Number of seconds to wait for the subscription API; overridable via REQUEST_TIMEOUT env var.
 SUBSCRIPTION_CHECK_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "5"))
+# Timeout for account-linking API calls (same REQUEST_TIMEOUT env var).
+LINK_API_TIMEOUT = SUBSCRIPTION_CHECK_TIMEOUT
 # Number of times to retry a failed subscription request before giving up.
 SUBSCRIPTION_RETRIES = 3
 
@@ -219,6 +222,8 @@ STRINGS: Dict[str, Dict[str, str]] = {
             "Response: {body}\n"
             "Result: approved={approved}"
         ),
+        "link_ok":   "✅ Telegram успешно привязан к аккаунту на сайте!",
+        "link_fail": "❌ Ссылка недействительна или истекла. Получи новую на сайте.",
     },
 
     # ─────────────── UKRAINIAN ───────────────
@@ -334,6 +339,8 @@ STRINGS: Dict[str, Dict[str, str]] = {
             "Response: {body}\n"
             "Result: approved={approved}"
         ),
+        "link_ok":   "✅ Telegram успішно прив'язано до акаунту на сайті!",
+        "link_fail": "❌ Посилання недійсне або застаріло. Отримай нове на сайті.",
     },
 
     # ─────────────── ENGLISH ───────────────
@@ -449,6 +456,8 @@ STRINGS: Dict[str, Dict[str, str]] = {
             "Response: {body}\n"
             "Result: approved={approved}"
         ),
+        "link_ok":   "✅ Telegram successfully linked to your website account!",
+        "link_fail": "❌ The link is invalid or has expired. Get a new one on the website.",
     },
 }
 
@@ -1607,6 +1616,37 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
 
                 # ── /start: always available in all chat types ──
                 if text.startswith("/start"):
+                    # ── Deep-link: /start link_<code> — link Telegram to website account ──
+                    parts = text.split(maxsplit=1)
+                    if len(parts) > 1 and parts[1].startswith("link_"):
+                        code = parts[1][5:]  # strip "link_" prefix
+                        # Basic validation: alphanumeric/hyphen/underscore, 4–128 chars
+                        if not code or not re.match(r'^[A-Za-z0-9_-]{4,128}$', code):
+                            logger.warning("Invalid link code from user_id=%s: %r", user_id, code)
+                            await tg_send(session, chat_id, T(lang, "link_fail"))
+                            continue
+                        logger.info("Link request from user_id=%s code=%s", user_id, code)
+                        link_ok = False
+                        try:
+                            async with session.post(
+                                LINK_API_URL,
+                                json={"code": code, "chat_id": user_id},
+                                timeout=LINK_API_TIMEOUT,
+                            ) as r:
+                                link_status = r.status
+                                link_body = await r.text()
+                            logger.info("Link response status=%s body=%s for user_id=%s",
+                                        link_status, link_body, user_id)
+                            try:
+                                link_ok = bool(json.loads(link_body).get("ok", False))
+                            except Exception:
+                                link_ok = False
+                        except Exception:
+                            logger.exception("Link API error for user_id=%s", user_id)
+                        await tg_send(session, chat_id,
+                                      T(lang, "link_ok" if link_ok else "link_fail"))
+                        continue
+
                     is_forum = bool(chat.get("is_forum"))
                     subscribe(store, chat_id, chat_type=chat_type, is_forum=is_forum)
                     if chat_type == "private":
