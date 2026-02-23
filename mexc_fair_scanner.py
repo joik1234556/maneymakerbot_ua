@@ -585,6 +585,14 @@ def to_float(x: Any) -> float:
 def is_pos(x: float) -> bool:
     return math.isfinite(x) and x > 0
 
+def _safe_chat_id(key: str) -> Optional[int]:
+    """Extract chat_id from a 'chat_id:symbol' key; returns None on parse error."""
+    try:
+        return int(key.split(":", 1)[0])
+    except (ValueError, IndexError):
+        logger.warning("Unexpected last_msg_id key format: %r", key)
+        return None
+
 def fmt_price(x: float) -> str:
     if not math.isfinite(x):
         return "N/A"
@@ -680,8 +688,13 @@ def load_data() -> Dict[str, Any]:
         return {"subs": {}, "chat_settings": {}}
 
 def save_data(d: Dict[str, Any]) -> None:
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
+    # Write to a temp file in the same directory, then atomically rename.
+    # This prevents bot_data.json corruption if the process is killed mid-write.
+    dir_ = os.path.dirname(os.path.abspath(DATA_FILE))
+    tmp = os.path.join(dir_, os.path.basename(DATA_FILE) + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(d, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, DATA_FILE)
 
 def get_chat_settings(store: Dict[str, Any], chat_id: int) -> Dict[str, Any]:
     cs = store["chat_settings"].get(str(chat_id))
@@ -1031,9 +1044,11 @@ async def load_bingx_marketrows(session: aiohttp.ClientSession, candidate_norm: 
             return None
         async with sem:
             try:
-                book = await fetch_json(session, BINGX_BOOK_TICKER, params={"symbol": raw})
-                tick = await fetch_json(session, BINGX_TICKER_24H, params={"symbol": raw})
-                prem = await fetch_json(session, BINGX_PREMIUM_INDEX, params={"symbol": raw})
+                book, tick, prem = await asyncio.gather(
+                    fetch_json(session, BINGX_BOOK_TICKER, params={"symbol": raw}),
+                    fetch_json(session, BINGX_TICKER_24H, params={"symbol": raw}),
+                    fetch_json(session, BINGX_PREMIUM_INDEX, params={"symbol": raw}),
+                )
 
                 book_list = _as_list(book)
                 tick_list = _as_list(tick)
@@ -1134,12 +1149,13 @@ async def load_okx_marketrows(session: aiohttp.ClientSession) -> Dict[str, Marke
         ask = to_float(it.get("askPx"))
         last = to_float(it.get("last"))
         vol = to_float(it.get("volCcy24h") or it.get("volCcy24H") or it.get("vol24h"))
+        fund = to_float(it.get("fundingRate"))
         out[norm] = MarketRow(
             exchange="OKX",
             bid=bid, ask=ask, last=last,
             vol24_usd=vol,
-            fund_rate=math.nan,
-            fund24_est=math.nan,
+            fund_rate=fund,
+            fund24_est=funding_24h_estimate(fund),
             fund_interval_h=DEFAULT_FUNDING_INTERVAL_HOURS,
             url=okx_trade_url(inst),
             raw_symbol=inst,
@@ -1406,6 +1422,12 @@ async def mexc_fair_loop(session: aiohttp.ClientSession, store: Dict[str, Any], 
             now = time.time()
             subs = all_subs(store)
 
+            # Prune stale entries to prevent unbounded memory growth.
+            # Keep 3× cooldown as a safety margin so a slow cycle never evicts
+            # an entry that is still within its cooldown window.
+            _prune_ts_fair = now - MEXC_FAIR_COOLDOWN_SEC * 3
+            last_alert = {k: ts for k, ts in last_alert.items() if ts > _prune_ts_fair}
+
             for chat_id in subs:
                 cs = get_chat_settings(store, chat_id)
                 meta = get_sub_meta(store, chat_id)
@@ -1511,6 +1533,16 @@ async def arb_loop(session: aiohttp.ClientSession, store: Dict[str, Any], settin
             now = time.time()
             subs = all_subs(store)
 
+            # Prune stale entries to prevent unbounded memory growth.
+            # 3× cooldown gives a generous safety margin for slow cycles.
+            _prune_ts = now - ARB_COOLDOWN_SEC * 3
+            last_alert_ts = {k: ts for k, ts in last_alert_ts.items() if ts > _prune_ts}
+            _active_subs = set(subs)
+            last_msg_id = {
+                k: mid for k, mid in last_msg_id.items()
+                if _safe_chat_id(k) in _active_subs
+            }
+
             for chat_id in subs:
                 cs = get_chat_settings(store, chat_id)
                 meta = get_sub_meta(store, chat_id)
@@ -1558,17 +1590,17 @@ async def arb_loop(session: aiohttp.ClientSession, store: Dict[str, Any], settin
                     if best.spread_best < min_spread:
                         continue
 
-                    # подтягиваем OKX funding только для участвующих
-                    if best.buy.exchange == "OKX":
+                    # подтягиваем OKX funding только для участвующих (только если не взято из тикеров)
+                    if best.buy.exchange == "OKX" and not math.isfinite(best.buy.fund_rate):
                         best.buy = await okx_fill_funding_for(session, best.buy)
-                    if best.sell.exchange == "OKX":
+                    if best.sell.exchange == "OKX" and not math.isfinite(best.sell.fund_rate):
                         best.sell = await okx_fill_funding_for(session, best.sell)
 
                     second = pick_second_if_close(pairs, best)
                     if second is not None:
-                        if second.buy.exchange == "OKX":
+                        if second.buy.exchange == "OKX" and not math.isfinite(second.buy.fund_rate):
                             second.buy = await okx_fill_funding_for(session, second.buy)
-                        if second.sell.exchange == "OKX":
+                        if second.sell.exchange == "OKX" and not math.isfinite(second.sell.fund_rate):
                             second.sell = await okx_fill_funding_for(session, second.sell)
 
                     key_cd = f"{chat_id}:{sym}:{best.buy.exchange}:{best.sell.exchange}"
