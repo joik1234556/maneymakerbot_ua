@@ -1,0 +1,27 @@
+[Unit]
+Description=MEXC Fair Scanner Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mexcbot
+Group=mexcbot
+WorkingDirectory=/opt/mexcbot
+
+# Bot token and other secrets are stored in this file (chmod 600, owned by mexcbot)
+EnvironmentFile=/opt/mexcbot/.env
+
+ExecStart=/opt/mexcbot/venv/bin/python mexc_fair_scanner.py
+
+# Automatically restart the bot if it crashes
+Restart=on-failure
+RestartSec=10
+
+# Write logs to systemd journal (view with: journalctl -u mexcbot -f)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mexcbot
+
+[Install]
+WantedBy=multi-user.target
