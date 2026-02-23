@@ -62,6 +62,12 @@ if [[ ! -f "$ENV_FILE" ]]; then
 # Telegram bot token — replace with your real token, then restart the service:
 #   sudo systemctl restart mexcbot
 BOT_TOKEN=PASTE_YOUR_BOT_TOKEN_HERE
+
+# Base URL of the subscription API server (change only if the IP address changes)
+API_BASE_URL=http://89.167.53.202
+
+# Logging level: INFO (default) or DEBUG (very verbose)
+LOG_LEVEL=INFO
 EOF
     chmod 600 "$ENV_FILE"
     echo "    *** IMPORTANT: Edit $ENV_FILE and set BOT_TOKEN before starting the bot! ***"

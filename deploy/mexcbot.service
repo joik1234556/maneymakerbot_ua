@@ -9,7 +9,12 @@ User=mexcbot
 Group=mexcbot
 WorkingDirectory=/opt/mexcbot
 
-# Bot token and other secrets are stored in this file (chmod 600, owned by mexcbot)
+# Secrets and configuration are stored in this file (chmod 600, owned by mexcbot).
+# Required variables:
+#   BOT_TOKEN=<your Telegram bot token>
+# Optional variables:
+#   API_BASE_URL=http://89.167.53.202   (default; override if the site IP changes)
+#   LOG_LEVEL=INFO                      (set to DEBUG for verbose output)
 EnvironmentFile=/opt/mexcbot/.env
 
 ExecStart=/opt/mexcbot/venv/bin/python mexc_fair_scanner.py

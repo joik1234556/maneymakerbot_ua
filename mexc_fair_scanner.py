@@ -1,14 +1,28 @@
 import asyncio
 import html as _html
 import json
+import logging
 import math
 import os
 import re
+import sys
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import aiohttp
+
+# =========================
+# LOGGING
+# =========================
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+
+logger = logging.getLogger("mexc_bot")
 
 # =========================
 # TELEGRAM SETTINGS
@@ -22,8 +36,10 @@ DEFAULT_TOPIC_ARB = 4    # ARB -> topic 4
 
 DATA_FILE = "bot_data.json"
 
-# Website subscription check endpoint (IP used directly to avoid DNS issues)
-SUBSCRIPTION_API_URL = "http://89.167.53.202/api/bot/check-subscription"
+# Website subscription check endpoint.
+# API_BASE_URL can be overridden via the environment variable of the same name.
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://89.167.53.202").rstrip("/")
+SUBSCRIPTION_API_URL = f"{API_BASE_URL}/api/bot/check-subscription"
 SUBSCRIPTION_SITE_URL = "https://arbitrageinsights.xyz/"
 SUBSCRIPTION_CHECK_TIMEOUT = 10  # seconds
 
@@ -182,6 +198,12 @@ STRINGS: Dict[str, Dict[str, str]] = {
             "Зарегистрируйтесь на сайте https://arbitrageinsights.xyz/\n"
             "или обратитесь к администратору."
         ),
+        "health_report": (
+            "🩺 Health check\n"
+            "Telegram: {tg_status}\n"
+            "Subscription API: {api_url}\n"
+            "API status: {api_status}"
+        ),
     },
 
     # ─────────────── UKRAINIAN ───────────────
@@ -283,6 +305,12 @@ STRINGS: Dict[str, Dict[str, str]] = {
             "Зареєструйтесь на сайті https://arbitrageinsights.xyz/\n"
             "або зверніться до адміністратора."
         ),
+        "health_report": (
+            "🩺 Health check\n"
+            "Telegram: {tg_status}\n"
+            "Subscription API: {api_url}\n"
+            "API status: {api_status}"
+        ),
     },
 
     # ─────────────── ENGLISH ───────────────
@@ -383,6 +411,12 @@ STRINGS: Dict[str, Dict[str, str]] = {
             "❌ Subscription is not active.\n"
             "Register at https://arbitrageinsights.xyz/\n"
             "or contact the administrator."
+        ),
+        "health_report": (
+            "🩺 Health check\n"
+            "Telegram: {tg_status}\n"
+            "Subscription API: {api_url}\n"
+            "API status: {api_status}"
         ),
     },
 }
@@ -654,7 +688,8 @@ async def tg_edit(session: aiohttp.ClientSession, chat_id: int, message_id: int,
     if not isinstance(result, dict):
         return {}
     if not result.get("ok") and not _tg_edit_is_not_modified(result):
-        print(f"tg_edit error [{chat_id}/{message_id}]: {result.get('description', result)}")
+        logger.warning("tg_edit error [%s/%s]: %s", chat_id, message_id,
+                       result.get("description", result))
     return result
 
 async def tg_get_updates(session: aiohttp.ClientSession, offset: Optional[int]) -> Dict[str, Any]:
@@ -674,7 +709,7 @@ async def tg_get_chat_member(session: aiohttp.ClientSession, chat_id: int, user_
         if isinstance(data, dict) and data.get("ok") and isinstance(data.get("result"), dict):
             return data["result"]
     except Exception as exc:
-        print(f"tg_get_chat_member error [{chat_id}/{user_id}]: {exc}")
+        logger.warning("tg_get_chat_member error [%s/%s]: %s", chat_id, user_id, exc)
     return {}
 
 async def is_group_admin(session: aiohttp.ClientSession, chat_id: int, user_id: Optional[int],
@@ -701,19 +736,30 @@ async def tg_answer_callback(session: aiohttp.ClientSession, callback_query_id: 
 async def check_site_subscription(session: aiohttp.ClientSession, user_id: int) -> bool:
     """Returns True if the user has an active subscription on arbitrageinsights.xyz.
     Falls back to True on network/API errors to avoid blocking users when the site is down."""
+    logger.info("Checking subscription for telegram_id=%s", user_id)
+    logger.info("Requesting URL: %s?chat_id=%s", SUBSCRIPTION_API_URL, user_id)
     try:
         async with session.get(SUBSCRIPTION_API_URL,
                                params={"chat_id": user_id},
                                timeout=SUBSCRIPTION_CHECK_TIMEOUT) as r:
+            status = r.status
             # content_type=None allows JSON parsing even if the server sends a
             # non-standard Content-Type header (e.g. text/plain).
-            data = await r.json(content_type=None)
+            body = await r.text()
+        logger.info("Subscription response status=%s", status)
+        logger.info("Subscription response body=%s", body)
+        try:
+            data = json.loads(body)
+        except Exception:
+            data = None
         if isinstance(data, dict):
-            return bool(data.get("approved", False))
-        print(f"check_site_subscription unexpected response [user {user_id}]: {data!r}")
+            result = bool(data.get("approved", False))
+            logger.info("Subscription result for telegram_id=%s: approved=%s", user_id, result)
+            return result
+        logger.warning("check_site_subscription unexpected response [user %s]: %r", user_id, body)
         return False
     except Exception as exc:
-        print(f"check_site_subscription error [user {user_id}]: {exc}")
+        logger.exception("Error while checking subscription for telegram_id=%s", user_id)
         return True  # fail-open: allow if API unreachable
 
 # =========================
@@ -1197,7 +1243,7 @@ def make_arb_message(symbol: str, rows_all: List[MarketRow],
 # LOOPS
 # =========================
 async def mexc_fair_loop(session: aiohttp.ClientSession, store: Dict[str, Any], settings_lock: asyncio.Lock):
-    print("✅ MEXC FAIR loop started")
+    logger.info("MEXC FAIR loop started")
     lev_map = await load_mexc_leverage_map(session)
     last_alert: Dict[str, float] = {}  # key = f"{chat_id}:{symbol}"
 
@@ -1273,13 +1319,13 @@ async def mexc_fair_loop(session: aiohttp.ClientSession, store: Dict[str, Any], 
                     await tg_send(session, chat_id, text, buttons=buttons, thread_id=thread_id)
 
         except Exception as e:
-            print(f"MEXC FAIR error: {type(e).__name__}: {e}")
+            logger.exception("MEXC FAIR error")
 
         elapsed = time.time() - t0
         await asyncio.sleep(max(0.5, MEXC_FAIR_REFRESH_SEC - elapsed))
 
 async def arb_loop(session: aiohttp.ClientSession, store: Dict[str, Any], settings_lock: asyncio.Lock):
-    print("✅ ARB loop started (7 exchanges)")
+    logger.info("ARB loop started (7 exchanges)")
     last_alert_ts: Dict[str, float] = {}        # key = f"{chat}:{sym}:{buy}:{sell}"
     last_msg_id: Dict[str, int] = {}            # key = f"{chat}:{sym}" -> message_id (для edit)
 
@@ -1394,7 +1440,7 @@ async def arb_loop(session: aiohttp.ClientSession, store: Dict[str, Any], settin
                                 if isinstance(resp, dict) and resp.get("ok") and isinstance(resp.get("result"), dict):
                                     last_msg_id[msg_key] = int(resp["result"]["message_id"])
                             except Exception as exc:
-                                print(f"ARB: failed to store message_id for {msg_key}: {exc}")
+                                logger.warning("ARB: failed to store message_id for %s: %s", msg_key, exc)
                     else:
                         resp = await tg_send(session, chat_id, text, buttons=buttons, thread_id=thread_id)
                         try:
@@ -1402,10 +1448,10 @@ async def arb_loop(session: aiohttp.ClientSession, store: Dict[str, Any], settin
                                 mid = int(resp["result"]["message_id"])
                                 last_msg_id[msg_key] = mid
                         except Exception as exc:
-                            print(f"ARB: failed to store message_id for {msg_key}: {exc}")
+                            logger.warning("ARB: failed to store message_id for %s: %s", msg_key, exc)
 
         except Exception as e:
-            print(f"ARB error: {type(e).__name__}: {e}")
+            logger.exception("ARB error")
 
         elapsed = time.time() - t0
         await asyncio.sleep(max(0.5, ARB_REFRESH_SEC - elapsed))
@@ -1414,7 +1460,7 @@ async def arb_loop(session: aiohttp.ClientSession, store: Dict[str, Any], settin
 # TELEGRAM LOOP (commands)
 # =========================
 async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], settings_lock: asyncio.Lock):
-    print("✅ Telegram loop started")
+    logger.info("Telegram loop started")
     offset = None
 
     while True:
@@ -1477,7 +1523,12 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
 
                 user = msg.get("from", {})
                 user_id = user.get("id")
+                username = user.get("username") or user.get("first_name") or "unknown"
                 chat_type = str(chat.get("type") or "")
+
+                logger.info("Incoming message from user_id=%s, username=%s, chat_type=%s, text=%s",
+                            user_id, username, chat_type, text)
+
                 # Bot-owner IDs always have admin rights; group/supergroup Telegram admins also qualify
                 is_admin = (user_id in ADMIN_IDS) or await is_group_admin(session, chat_id, user_id, chat_type)
 
@@ -1507,6 +1558,35 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
 
                 if text.startswith("/lang"):
                     await tg_send(session, chat_id, LANG_CHOICE_TEXT, buttons=LANG_CHOICE_BUTTONS)
+
+                elif text.startswith("/health"):
+                    # Check Telegram connectivity
+                    tg_status = "✅ OK"
+                    try:
+                        tg_resp = await tg_get_updates(session, offset)
+                        if not isinstance(tg_resp, dict):
+                            tg_status = "⚠️ unexpected response"
+                    except Exception as exc:
+                        tg_status = f"❌ error: {exc}"
+
+                    # Check subscription API
+                    api_status = "✅ OK"
+                    try:
+                        async with session.get(SUBSCRIPTION_API_URL,
+                                               params={"chat_id": 0},
+                                               timeout=SUBSCRIPTION_CHECK_TIMEOUT) as r:
+                            api_http = r.status
+                        api_status = f"✅ HTTP {api_http}"
+                    except Exception as exc:
+                        api_status = f"❌ error: {exc}"
+
+                    logger.info("Health check requested by user_id=%s: tg=%s api=%s",
+                                user_id, tg_status, api_status)
+                    await tg_send(session, chat_id,
+                                  T(lang, "health_report",
+                                    tg_status=tg_status,
+                                    api_url=SUBSCRIPTION_API_URL,
+                                    api_status=api_status))
 
                 elif text.startswith("/stop"):
                     unsubscribe(store, chat_id)
@@ -1711,18 +1791,26 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                             await tg_send(session, chat_id, T(lang, "fair_vol_err"))
 
         except Exception as e:
-            print(f"Telegram loop error: {type(e).__name__}: {e}")
+            logger.exception("Telegram loop error")
             await asyncio.sleep(POLL_UPDATES_SLEEP)
 
 # =========================
 # MAIN
 # =========================
 async def main():
+    # ── Fail-fast validation ──────────────────────────────────────────────────
     if not BOT_TOKEN or "PASTE_" in BOT_TOKEN:
-        raise RuntimeError("Установи BOT_TOKEN: задай переменную окружения BOT_TOKEN или вставь токен в начало файла.")
+        logger.error("BOT_TOKEN not configured! "
+                     "Set the BOT_TOKEN environment variable before starting the bot.")
+        sys.exit(1)
+
+    logger.info("Bot starting...")
+    logger.info("API_BASE_URL=%s", API_BASE_URL)
+    logger.info("SUBSCRIPTION_API_URL=%s", SUBSCRIPTION_API_URL)
+    logger.info("LOG_LEVEL=%s", LOG_LEVEL)
 
     store = load_data()
-    print(f"✅ Loaded subscribers: {len(all_subs(store))}")
+    logger.info("Loaded subscribers: %d", len(all_subs(store)))
 
     settings_lock = asyncio.Lock()
 
