@@ -1702,6 +1702,13 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                 cs = get_chat_settings(store, chat_id)
                 lang = cs.get("lang", DEFAULT_LANG)
 
+                # ── For group/supergroup chats, ALL commands require admin rights ──
+                if chat_type in ("group", "supergroup") and not is_admin:
+                    logger.info("Blocked non-admin command in group: user_id=%s chat_id=%s text=%s",
+                                user_id, chat_id, text)
+                    await tg_send(session, chat_id, T(lang, "no_access"))
+                    continue
+
                 # ── /start: always available in all chat types ──
                 if text.startswith("/start"):
                     # ── Deep-link: /start link_<code> — link Telegram to website account ──
