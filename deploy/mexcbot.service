@@ -12,9 +12,10 @@ WorkingDirectory=/opt/mexcbot
 # Secrets and configuration are stored in this file (chmod 600, owned by mexcbot).
 # Required variables:
 #   BOT_TOKEN=<your Telegram bot token>
+#   API_BASE_URL=http://127.0.0.1:8000  (loopback — bot and site are on the same server)
 # Optional variables:
-#   API_BASE_URL=http://89.167.53.202   (default; override if the site IP changes)
-#   LOG_LEVEL=INFO                      (set to DEBUG for verbose output)
+#   LOG_LEVEL=INFO          (set to DEBUG for verbose output)
+#   REQUEST_TIMEOUT=5       (subscription API HTTP timeout in seconds)
 EnvironmentFile=/opt/mexcbot/.env
 
 ExecStart=/opt/mexcbot/venv/bin/python mexc_fair_scanner.py

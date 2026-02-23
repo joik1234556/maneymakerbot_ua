@@ -5,6 +5,7 @@ import logging
 import math
 import os
 import re
+import signal
 import sys
 import time
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
     level=LOG_LEVEL,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
 
 logger = logging.getLogger("mexc_bot")
@@ -37,11 +39,16 @@ DEFAULT_TOPIC_ARB = 4    # ARB -> topic 4
 DATA_FILE = "bot_data.json"
 
 # Website subscription check endpoint.
-# API_BASE_URL can be overridden via the environment variable of the same name.
-API_BASE_URL = os.environ.get("API_BASE_URL", "http://89.167.53.202").rstrip("/")
+# API_BASE_URL is REQUIRED — set it in the .env file (e.g. http://127.0.0.1:8000).
+# No default is provided intentionally: the bot exits at startup if this is missing.
+API_BASE_URL = os.environ.get("API_BASE_URL", "").rstrip("/")
 SUBSCRIPTION_API_URL = f"{API_BASE_URL}/api/bot/check-subscription"
 SUBSCRIPTION_SITE_URL = "https://arbitrageinsights.xyz/"
-SUBSCRIPTION_CHECK_TIMEOUT = 10  # seconds
+
+# Number of seconds to wait for the subscription API; overridable via REQUEST_TIMEOUT env var.
+SUBSCRIPTION_CHECK_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "5"))
+# Number of times to retry a failed subscription request before giving up.
+SUBSCRIPTION_RETRIES = 3
 
 POLL_UPDATES_TIMEOUT = 20
 POLL_UPDATES_SLEEP = 1
@@ -204,6 +211,14 @@ STRINGS: Dict[str, Dict[str, str]] = {
             "Subscription API: {api_url}\n"
             "API status: {api_status}"
         ),
+        "debug_sub_report": (
+            "🔍 Debug subscription\n"
+            "telegram_id: {uid}\n"
+            "API URL: {api_url}\n"
+            "HTTP status: {http_status}\n"
+            "Response: {body}\n"
+            "Result: approved={approved}"
+        ),
     },
 
     # ─────────────── UKRAINIAN ───────────────
@@ -311,6 +326,14 @@ STRINGS: Dict[str, Dict[str, str]] = {
             "Subscription API: {api_url}\n"
             "API status: {api_status}"
         ),
+        "debug_sub_report": (
+            "🔍 Debug subscription\n"
+            "telegram_id: {uid}\n"
+            "API URL: {api_url}\n"
+            "HTTP status: {http_status}\n"
+            "Response: {body}\n"
+            "Result: approved={approved}"
+        ),
     },
 
     # ─────────────── ENGLISH ───────────────
@@ -417,6 +440,14 @@ STRINGS: Dict[str, Dict[str, str]] = {
             "Telegram: {tg_status}\n"
             "Subscription API: {api_url}\n"
             "API status: {api_status}"
+        ),
+        "debug_sub_report": (
+            "🔍 Debug subscription\n"
+            "telegram_id: {uid}\n"
+            "API URL: {api_url}\n"
+            "HTTP status: {http_status}\n"
+            "Response: {body}\n"
+            "Result: approved={approved}"
         ),
     },
 }
@@ -734,33 +765,72 @@ async def tg_answer_callback(session: aiohttp.ClientSession, callback_query_id: 
         pass
 
 async def check_site_subscription(session: aiohttp.ClientSession, user_id: int) -> bool:
-    """Returns True if the user has an active subscription on arbitrageinsights.xyz.
-    Falls back to True on network/API errors to avoid blocking users when the site is down."""
+    """Checks the subscription API with retries and strict validation.
+
+    Returns True only when the API responds HTTP 200 with {"approved": true}.
+    Returns False (fail-closed) for any error, bad status, bad JSON, or missing key.
+    All failures are logged as ERROR so they are visible in journalctl immediately.
+    """
     logger.info("Checking subscription for telegram_id=%s", user_id)
     logger.info("Requesting URL: %s?chat_id=%s", SUBSCRIPTION_API_URL, user_id)
-    try:
-        async with session.get(SUBSCRIPTION_API_URL,
-                               params={"chat_id": user_id},
-                               timeout=SUBSCRIPTION_CHECK_TIMEOUT) as r:
-            status = r.status
-            # content_type=None allows JSON parsing even if the server sends a
-            # non-standard Content-Type header (e.g. text/plain).
-            body = await r.text()
-        logger.info("Subscription response status=%s", status)
-        logger.info("Subscription response body=%s", body)
+
+    for attempt in range(1, SUBSCRIPTION_RETRIES + 1):
         try:
-            data = json.loads(body)
-        except Exception:
-            data = None
-        if isinstance(data, dict):
-            result = bool(data.get("approved", False))
-            logger.info("Subscription result for telegram_id=%s: approved=%s", user_id, result)
+            t0 = time.time()
+            async with session.get(
+                SUBSCRIPTION_API_URL,
+                params={"chat_id": user_id},
+                timeout=SUBSCRIPTION_CHECK_TIMEOUT,
+            ) as r:
+                status = r.status
+                body = await r.text()
+            elapsed = time.time() - t0
+
+            logger.info("Subscription response status=%s body=%s (%.2fs, attempt %d/%d)",
+                        status, body, elapsed, attempt, SUBSCRIPTION_RETRIES)
+
+            # ── Strict: only HTTP 200 is accepted ────────────────────────────
+            if status != 200:
+                logger.error("Subscription API returned HTTP %s for telegram_id=%s", status, user_id)
+                return False
+
+            # ── Parse JSON ───────────────────────────────────────────────────
+            try:
+                data = json.loads(body)
+            except json.JSONDecodeError:
+                logger.error("Subscription API returned invalid JSON for telegram_id=%s: %r", user_id, body)
+                return False
+
+            if not isinstance(data, dict):
+                logger.error("Subscription API response is not a JSON object for telegram_id=%s: %r",
+                             user_id, body)
+                return False
+
+            if "approved" not in data:
+                logger.error("Subscription API response missing 'approved' key for telegram_id=%s: %r",
+                             user_id, data)
+                return False
+
+            result = bool(data["approved"])
+            logger.info("Subscription result: approved=%s for telegram_id=%s", result, user_id)
             return result
-        logger.warning("check_site_subscription unexpected response [user %s]: %r", user_id, body)
-        return False
-    except Exception as exc:
-        logger.exception("Error while checking subscription for telegram_id=%s", user_id)
-        return True  # fail-open: allow if API unreachable
+
+        except asyncio.TimeoutError:
+            logger.error("Subscription API timeout (attempt %d/%d) for telegram_id=%s",
+                         attempt, SUBSCRIPTION_RETRIES, user_id)
+        except aiohttp.ClientConnectionError as exc:
+            logger.error("Subscription API connection error (attempt %d/%d) for telegram_id=%s: %s",
+                         attempt, SUBSCRIPTION_RETRIES, user_id, exc)
+        except Exception:
+            logger.exception("Subscription API unexpected error (attempt %d/%d) for telegram_id=%s",
+                             attempt, SUBSCRIPTION_RETRIES, user_id)
+
+        if attempt < SUBSCRIPTION_RETRIES:
+            await asyncio.sleep(1)
+
+    logger.error("Subscription check failed after %d attempts for telegram_id=%s",
+                 SUBSCRIPTION_RETRIES, user_id)
+    return False  # fail-closed: deny if API unreachable after all retries
 
 # =========================
 # DATA STRUCTURES
@@ -1569,14 +1639,25 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                     except Exception as exc:
                         tg_status = f"❌ error: {exc}"
 
-                    # Check subscription API
+                    # Check subscription API (with response body validation)
                     api_status = "✅ OK"
                     try:
                         async with session.get(SUBSCRIPTION_API_URL,
                                                params={"chat_id": 0},
                                                timeout=SUBSCRIPTION_CHECK_TIMEOUT) as r:
                             api_http = r.status
-                        api_status = f"✅ HTTP {api_http}"
+                            api_body = await r.text()
+                        if api_http != 200:
+                            api_status = f"⚠️ HTTP {api_http}"
+                        else:
+                            try:
+                                parsed = json.loads(api_body)
+                                if isinstance(parsed, dict) and "approved" in parsed:
+                                    api_status = f"✅ HTTP {api_http} (valid JSON)"
+                                else:
+                                    api_status = f"⚠️ HTTP {api_http} (missing 'approved' key)"
+                            except Exception:
+                                api_status = f"⚠️ HTTP {api_http} (invalid JSON)"
                     except Exception as exc:
                         api_status = f"❌ error: {exc}"
 
@@ -1587,6 +1668,47 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
                                     tg_status=tg_status,
                                     api_url=SUBSCRIPTION_API_URL,
                                     api_status=api_status))
+
+                elif text.startswith("/debug_subscription"):
+                    if not is_admin:
+                        await tg_send(session, chat_id, T(lang, "no_access"))
+                    else:
+                        target_id = user_id or chat_id
+                        debug_http = "N/A"
+                        debug_body = "N/A"
+                        debug_approved = "error"
+                        try:
+                            async with session.get(
+                                SUBSCRIPTION_API_URL,
+                                params={"chat_id": target_id},
+                                timeout=SUBSCRIPTION_CHECK_TIMEOUT,
+                            ) as r:
+                                debug_http = str(r.status)
+                                debug_body = await r.text()
+                            if debug_http == "200":
+                                try:
+                                    d = json.loads(debug_body)
+                                    debug_approved = str(bool(d.get("approved", False))) if isinstance(d, dict) else "bad JSON"
+                                except Exception:
+                                    debug_approved = "JSON parse error"
+                            else:
+                                debug_approved = f"HTTP {debug_http}"
+                        except asyncio.TimeoutError:
+                            debug_body = "timeout"
+                            debug_approved = "timeout"
+                        except Exception as exc:
+                            debug_body = str(exc)
+                            debug_approved = "connection error"
+
+                        logger.info("Debug subscription for user_id=%s: http=%s approved=%s",
+                                    target_id, debug_http, debug_approved)
+                        await tg_send(session, chat_id,
+                                      T(lang, "debug_sub_report",
+                                        uid=target_id,
+                                        api_url=SUBSCRIPTION_API_URL,
+                                        http_status=debug_http,
+                                        body=debug_body[:500],
+                                        approved=debug_approved))
 
                 elif text.startswith("/stop"):
                     unsubscribe(store, chat_id)
@@ -1800,26 +1922,43 @@ async def telegram_loop(session: aiohttp.ClientSession, store: Dict[str, Any], s
 async def main():
     # ── Fail-fast validation ──────────────────────────────────────────────────
     if not BOT_TOKEN or "PASTE_" in BOT_TOKEN:
-        logger.error("BOT_TOKEN not configured! "
-                     "Set the BOT_TOKEN environment variable before starting the bot.")
+        logger.error("Required environment variable missing: BOT_TOKEN")
+        sys.exit(1)
+
+    if not API_BASE_URL:
+        logger.error("Required environment variable missing: API_BASE_URL")
         sys.exit(1)
 
     logger.info("Bot starting...")
     logger.info("API_BASE_URL=%s", API_BASE_URL)
     logger.info("SUBSCRIPTION_API_URL=%s", SUBSCRIPTION_API_URL)
     logger.info("LOG_LEVEL=%s", LOG_LEVEL)
+    logger.info("REQUEST_TIMEOUT=%s", SUBSCRIPTION_CHECK_TIMEOUT)
 
     store = load_data()
     logger.info("Loaded subscribers: %d", len(all_subs(store)))
 
+    # ── SIGTERM handler: graceful shutdown ────────────────────────────────────
+    loop = asyncio.get_running_loop()
+
+    def _on_sigterm():
+        logger.info("SIGTERM received — shutting down gracefully")
+        for task in asyncio.all_tasks(loop):
+            task.cancel()
+
+    loop.add_signal_handler(signal.SIGTERM, _on_sigterm)
+
     settings_lock = asyncio.Lock()
 
     async with aiohttp.ClientSession() as session:
-        await asyncio.gather(
-            telegram_loop(session, store, settings_lock),
-            mexc_fair_loop(session, store, settings_lock),
-            arb_loop(session, store, settings_lock),
-        )
+        try:
+            await asyncio.gather(
+                telegram_loop(session, store, settings_lock),
+                mexc_fair_loop(session, store, settings_lock),
+                arb_loop(session, store, settings_lock),
+            )
+        except asyncio.CancelledError:
+            logger.info("Bot stopped")
 
 if __name__ == "__main__":
     asyncio.run(main())

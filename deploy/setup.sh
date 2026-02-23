@@ -63,11 +63,16 @@ if [[ ! -f "$ENV_FILE" ]]; then
 #   sudo systemctl restart mexcbot
 BOT_TOKEN=PASTE_YOUR_BOT_TOKEN_HERE
 
-# Base URL of the subscription API server (change only if the IP address changes)
-API_BASE_URL=http://89.167.53.202
+# Base URL of the subscription API (required, no default in the bot code).
+# Bot and site are on the same server, so use the loopback address.
+# Adjust the port to match your web server (e.g. 8000 for gunicorn, 80 for nginx).
+API_BASE_URL=http://127.0.0.1:8000
 
-# Logging level: INFO (default) or DEBUG (very verbose)
+# Logging level: INFO (default) or DEBUG (very verbose — shows full request/response)
 LOG_LEVEL=INFO
+
+# HTTP timeout in seconds for subscription API requests (default: 5)
+REQUEST_TIMEOUT=5
 EOF
     chmod 600 "$ENV_FILE"
     echo "    *** IMPORTANT: Edit $ENV_FILE and set BOT_TOKEN before starting the bot! ***"

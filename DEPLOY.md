@@ -42,16 +42,23 @@ The script will:
 sudo nano /opt/mexcbot/.env
 ```
 
-Replace the placeholder line:
+Set **both** required variables plus any optional ones you want to customize:
 ```
-BOT_TOKEN=PASTE_YOUR_BOT_TOKEN_HERE
-```
-with your real token, e.g.:
-```
+# Required
 BOT_TOKEN=8492744850:AAH9hLd4SNXQL8zedZQatuKRlYyLztcSv_k
+API_BASE_URL=http://127.0.0.1:8000   # loopback — bot and site are on the same server
+
+# Optional
+LOG_LEVEL=INFO        # set to DEBUG for full request/response logging
+REQUEST_TIMEOUT=5     # subscription API timeout in seconds
 ```
 
-Save the file (`Ctrl+O`, `Enter`, `Ctrl+X`). The file is owned by `mexcbot` and has `chmod 600` — it is not readable by other users or the web server.
+> **Why `http://127.0.0.1:8000`?**  
+> Bot and website run on the same server. Using the loopback address avoids DNS, is faster, and keeps traffic off the public network. Adjust the port to match your web server (e.g. `80` for nginx, `8000` for gunicorn).
+
+Save the file (`Ctrl+O`, `Enter`, `Ctrl+X`). The file has `chmod 600` — not readable by other users.
+
+> **Fail-fast**: if `BOT_TOKEN` or `API_BASE_URL` are missing, the bot exits immediately with an `ERROR` log entry visible in `journalctl`.
 
 ### 4. Start the bot
 
@@ -100,7 +107,18 @@ The update script **never overwrites** `/opt/mexcbot/.env` or `bot_data.json`, s
 
 ---
 
-## Why a separate user?
+## Environment variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `BOT_TOKEN` | ✅ Yes | — | Telegram bot token |
+| `API_BASE_URL` | ✅ Yes | — | Base URL of the subscription API (e.g. `http://127.0.0.1:8000`) |
+| `LOG_LEVEL` | No | `INFO` | Logging verbosity (`DEBUG` for full request/response detail) |
+| `REQUEST_TIMEOUT` | No | `5` | Subscription API HTTP timeout (seconds) |
+
+The bot performs **fail-fast validation**: if `BOT_TOKEN` or `API_BASE_URL` are missing at startup, it immediately logs an `ERROR` and exits with code 1. You will see the reason clearly in `journalctl`.
+
+---
 
 | Risk | Protection |
 |------|------------|
